@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>PulseWin</AssemblyName>
+    <RootNamespace>PulseWin</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <Version>0.1.0</Version>
+    <Product>PulseWin</Product>
+    <Description>Windows port of Pulse — AI coding allowance monitor</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      WinForms is enabled only for its tray icon. Its implicit usings, however,
+      drag System.Drawing and System.Windows.Forms into every file, where they
+      collide with the WPF equivalents this app actually uses — Color, Point,
+      Size and Pen all exist in both. Removing them here fixes that once instead
+      of forcing an alias into every file that draws something; the tray reaches
+      its icon by fully-qualified name.
+    -->
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+
+    <!--
+      The WindowsDesktop SDK also *replaces* the default implicit-using set for
+      WPF and WinForms projects, and the replacement omits System.IO — so Path,
+      File and IOException stop resolving. Adding the two back keeps the ordinary
+      desktop set rather than sprinkling `using System.IO;` through every file.
+    -->
+    <Using Include="System.IO" />
+    <Using Include="System.Net.Http" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

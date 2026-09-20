@@ -1,0 +1,630 @@
+using System.Globalization;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using PulseWin.Core;
+using PulseWin.Providers;
+using PulseWin.Services;
+using PulseWin.Storage;
+
+namespace PulseWin.Ui;
+
+/// <summary>
+/// Everything the reader can decide, in one window.
+///
+/// <para>
+/// The order is deliberate: services first, because that is what most people came
+/// for, and each service's credential field is described by where its key actually
+/// comes from rather than by the word "API key". Two of the five do not want a key
+/// at all — Codex borrows the CLI's login and OpenCode Go will read its own file —
+/// and a field that asks for something the product never issued sends people
+/// looking for one that does not exist.
+/// </para>
+/// </summary>
+internal sealed class SettingsWindow : Window
+{
+    private readonly UsageStore _store;
+    private readonly Dictionary<Provider, TextBlock> _status = new();
+    private readonly Dictionary<Provider, PasswordBox> _keyFields = new();
+    private readonly StackPanel _codexAccounts = new();
+    private readonly ComboBox _edge = new();
+    private readonly TextBox _refresh = new();
+    private readonly TextBox _offset = new();
+    private readonly RadioButton _basisTopUp = new();
+    private readonly RadioButton _basisBalanceOnly = new();
+    private readonly RadioButton _basisBudget = new();
+    private readonly TextBox _budget = new();
+    private readonly TextBox _currency = new();
+
+    public event Action? SettingsChanged;
+
+    public SettingsWindow(UsageStore store)
+    {
+        _store = store;
+
+        Title = "PulseWin settings";
+        Width = 620;
+        Height = 720;
+        WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        Background = Theme.Brush(Color.FromRgb(0x14, 0x14, 0x16));
+        FontFamily = Theme.Font;
+        Foreground = Theme.PrimaryBrush;
+
+        var panel = new StackPanel { Margin = new Thickness(22) };
+
+        panel.Children.Add(Heading("Services", 17));
+        panel.Children.Add(Caption(
+            "A switched-off service is not checked at all — no credentials are read and no request is made."));
+        foreach (var provider in ProviderCatalog.All)
+            panel.Children.Add(ProviderBlock(provider));
+
+        panel.Children.Add(Heading("DeepSeek", 15));
+        panel.Children.Add(Caption(
+            "DeepSeek reports a balance and no allowance, so the ring needs a denominator from somewhere. "
+            + "Nothing here is a guess about DeepSeek's pricing."));
+        panel.Children.Add(DeepSeekBlock());
+
+        panel.Children.Add(Heading("The rail", 15));
+        panel.Children.Add(RailBlock());
+
+        panel.Children.Add(Heading("Codex accounts", 15));
+        panel.Children.Add(Caption(
+            "The ring above reads the login Codex saved on this machine. Add an account here to monitor a "
+            + "second subscription alongside it — each one carries its own token."));
+        panel.Children.Add(_codexAccounts);
+
+        Content = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = panel,
+        };
+
+        Load();
+        RefreshStatus();
+    }
+
+    // ------------------------------------------------------------- construction
+
+    private static TextBlock Heading(string text, double size) => new()
+    {
+        Text = text,
+        FontSize = size,
+        FontWeight = FontWeights.SemiBold,
+        Margin = new Thickness(0, 18, 0, 4),
+        Foreground = Theme.PrimaryBrush,
+    };
+
+    private static TextBlock Caption(string text) => new()
+    {
+        Text = text,
+        FontSize = 11.5,
+        TextWrapping = TextWrapping.Wrap,
+        Margin = new Thickness(0, 0, 0, 10),
+        Foreground = Theme.SecondaryBrush,
+    };
+
+    private Border Block() => new()
+    {
+        Background = Theme.Brush(Color.FromRgb(0x1F, 0x1F, 0x23)),
+        BorderBrush = Theme.Brush(Theme.Stroke),
+        BorderThickness = new Thickness(1),
+        CornerRadius = new CornerRadius(9),
+        Padding = new Thickness(13),
+        Margin = new Thickness(0, 0, 0, 9),
+    };
+
+    private UIElement ProviderBlock(Provider provider)
+    {
+        var block = Block();
+        var panel = new StackPanel();
+
+        var header = new Grid();
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var enable = new CheckBox
+        {
+            IsChecked = AppSettings.Current.Enabled.Contains(provider),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 9, 0),
+        };
+        enable.Checked += (_, _) => SetEnabled(provider, true);
+        enable.Unchecked += (_, _) => SetEnabled(provider, false);
+        Grid.SetColumn(enable, 0);
+        header.Children.Add(enable);
+
+        var name = new TextBlock
+        {
+            Text = provider.DisplayName(),
+            FontSize = 13.5,
+            FontWeight = FontWeights.SemiBold,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(name, 1);
+        header.Children.Add(name);
+
+        var status = new TextBlock
+        {
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Foreground = Theme.SecondaryBrush,
+        };
+        _status[provider] = status;
+        Grid.SetColumn(status, 2);
+        header.Children.Add(status);
+
+        panel.Children.Add(header);
+        panel.Children.Add(new TextBlock
+        {
+            Text = provider.CredentialNote(),
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(26, 5, 0, 0),
+            Foreground = Theme.SecondaryBrush,
+        });
+
+        if (provider.UsesApiKey())
+            panel.Children.Add(KeyField(provider));
+
+        block.Child = panel;
+        return block;
+    }
+
+    private UIElement KeyField(Provider provider)
+    {
+        var grid = new Grid { Margin = new Thickness(26, 9, 0, 0) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+        var field = new PasswordBox
+        {
+            FontSize = 12,
+            Padding = new Thickness(7, 5, 7, 5),
+            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Foreground = Theme.PrimaryBrush,
+            BorderBrush = Theme.Brush(Theme.Stroke),
+            // The field starts empty even when a key is stored. Writing an existing
+            // secret back into a text field so it can be read off the screen is the
+            // one convenience not worth having.
+            PasswordChar = '•',
+            ToolTip = CredentialStore.Has(provider)
+                ? "A key is already stored. Typing here replaces it."
+                : "Paste the key here.",
+        };
+        _keyFields[provider] = field;
+
+        void Commit()
+        {
+            var entered = field.Password;
+            if (entered.Length == 0) return;
+
+            CredentialStore.Set(provider, entered);
+            field.Clear();
+            RefreshStatus();
+            SettingsChanged?.Invoke();
+        }
+
+        field.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Enter) Commit();
+        };
+        field.LostFocus += (_, _) => Commit();
+
+        Grid.SetColumn(field, 0);
+        grid.Children.Add(field);
+
+        var clear = new Button
+        {
+            Content = "Clear",
+            FontSize = 11,
+            Padding = new Thickness(10, 4, 10, 4),
+            Margin = new Thickness(7, 0, 0, 0),
+            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Foreground = Theme.PrimaryBrush,
+            BorderBrush = Theme.Brush(Theme.Stroke),
+        };
+        clear.Click += (_, _) =>
+        {
+            CredentialStore.Set(provider, null);
+            RefreshStatus();
+            SettingsChanged?.Invoke();
+        };
+        Grid.SetColumn(clear, 1);
+        grid.Children.Add(clear);
+
+        return grid;
+    }
+
+    private UIElement DeepSeekBlock()
+    {
+        var block = Block();
+        var panel = new StackPanel();
+
+        string[] labels =
+        [
+            "Since top-up — measure against the highest balance this app has watched",
+            "Balance only — draw the money, with no percentage at all",
+            "My budget — measure against a figure I type",
+        ];
+        RadioButton[] buttons = [_basisTopUp, _basisBalanceOnly, _basisBudget];
+
+        for (var i = 0; i < buttons.Length; i++)
+        {
+            buttons[i].Content = labels[i];
+            buttons[i].FontSize = 12;
+            buttons[i].Margin = new Thickness(0, 3, 0, 3);
+            buttons[i].Foreground = Theme.PrimaryBrush;
+            buttons[i].GroupName = "deepseek-basis";
+            panel.Children.Add(buttons[i]);
+        }
+
+        var row = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(110) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(90) });
+
+        var budgetLabel = new TextBlock
+        {
+            Text = "Budget",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 9, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(budgetLabel, 0);
+        row.Children.Add(budgetLabel);
+
+        StyleField(_budget);
+        Grid.SetColumn(_budget, 1);
+        row.Children.Add(_budget);
+
+        var currencyLabel = new TextBlock
+        {
+            Text = "Currency",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(16, 0, 9, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(currencyLabel, 2);
+        row.Children.Add(currencyLabel);
+
+        StyleField(_currency);
+        _currency.ToolTip = "Blank follows the first purse with money in it. An account can hold both CNY and USD.";
+        Grid.SetColumn(_currency, 3);
+        row.Children.Add(_currency);
+
+        panel.Children.Add(row);
+
+        void Commit()
+        {
+            var settings = AppSettings.Current;
+            settings.DeepSeekBasis = _basisBalanceOnly.IsChecked == true
+                ? DeepSeekBasis.BalanceOnly
+                : _basisBudget.IsChecked == true
+                    ? DeepSeekBasis.Budget
+                    : DeepSeekBasis.SinceTopUp;
+
+            // A budget that is not a finite positive number is not a denominator.
+            // Left unparsed rather than defaulted to something, so a typo cannot
+            // silently become a fraction nobody asked for.
+            settings.DeepSeekBudget = double.TryParse(
+                _budget.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var budget)
+                && double.IsFinite(budget) && budget > 0
+                    ? budget
+                    : null;
+
+            var currency = _currency.Text.Trim().ToUpperInvariant();
+            settings.DeepSeekCurrency = currency.Length == 0 ? null : currency;
+
+            settings.Save();
+            SettingsChanged?.Invoke();
+        }
+
+        foreach (var button in buttons) button.Checked += (_, _) => Commit();
+        _budget.LostFocus += (_, _) => Commit();
+        _currency.LostFocus += (_, _) => Commit();
+
+        block.Child = panel;
+        return block;
+    }
+
+    private UIElement RailBlock()
+    {
+        var block = Block();
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(70) });
+
+        var edgeLabel = new TextBlock
+        {
+            Text = "Edge",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 9, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(edgeLabel, 0);
+        row.Children.Add(edgeLabel);
+
+        _edge.ItemsSource = new[] { "Right", "Left", "Top" };
+        _edge.FontSize = 12;
+        _edge.Margin = new Thickness(0, 0, 16, 0);
+        _edge.SelectionChanged += (_, _) => CommitRail();
+        Grid.SetColumn(_edge, 1);
+        row.Children.Add(_edge);
+
+        var refreshLabel = new TextBlock
+        {
+            Text = "Every",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 9, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(refreshLabel, 2);
+        row.Children.Add(refreshLabel);
+
+        StyleField(_refresh);
+        _refresh.ToolTip = "Minutes between checks, 1 to 60.";
+        _refresh.LostFocus += (_, _) => CommitRail();
+        Grid.SetColumn(_refresh, 3);
+        row.Children.Add(_refresh);
+
+        var offsetLabel = new TextBlock
+        {
+            Text = "Offset",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(16, 0, 9, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        Grid.SetColumn(offsetLabel, 4);
+        row.Children.Add(offsetLabel);
+
+        StyleField(_offset);
+        _offset.ToolTip = "Slides the rail along its edge, in pixels. Negative moves it up or left.";
+        _offset.LostFocus += (_, _) => CommitRail();
+        Grid.SetColumn(_offset, 5);
+        row.Children.Add(_offset);
+
+        block.Child = row;
+        return block;
+    }
+
+    private static void StyleField(TextBox field)
+    {
+        field.FontSize = 12;
+        field.Padding = new Thickness(7, 5, 7, 5);
+        field.Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30));
+        field.Foreground = Theme.PrimaryBrush;
+        field.BorderBrush = Theme.Brush(Theme.Stroke);
+    }
+
+    // -------------------------------------------------------------- behaviour
+
+    private void SetEnabled(Provider provider, bool enabled)
+    {
+        var settings = AppSettings.Current;
+        if (enabled) settings.Enabled.Add(provider);
+        else settings.Enabled.Remove(provider);
+
+        settings.Normalise();
+        settings.Save();
+        RefreshStatus();
+        SettingsChanged?.Invoke();
+    }
+
+    private void CommitRail()
+    {
+        var settings = AppSettings.Current;
+        settings.Edge = _edge.SelectedIndex switch
+        {
+            1 => RailEdge.Left,
+            2 => RailEdge.Top,
+            _ => RailEdge.Right,
+        };
+
+        settings.RefreshMinutes = int.TryParse(_refresh.Text.Trim(), out var minutes)
+            ? Math.Clamp(minutes, 1, 60)
+            : settings.RefreshMinutes;
+
+        settings.RailOffset = double.TryParse(
+            _offset.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out var offset)
+            ? offset
+            : settings.RailOffset;
+
+        settings.Save();
+        SettingsChanged?.Invoke();
+    }
+
+    private void Load()
+    {
+        var settings = AppSettings.Current;
+
+        _basisTopUp.IsChecked = settings.DeepSeekBasis == DeepSeekBasis.SinceTopUp;
+        _basisBalanceOnly.IsChecked = settings.DeepSeekBasis == DeepSeekBasis.BalanceOnly;
+        _basisBudget.IsChecked = settings.DeepSeekBasis == DeepSeekBasis.Budget;
+        _budget.Text = settings.DeepSeekBudget?.ToString(CultureInfo.InvariantCulture) ?? "";
+        _currency.Text = settings.DeepSeekCurrency ?? "";
+
+        _edge.SelectedIndex = settings.Edge switch
+        {
+            RailEdge.Left => 1,
+            RailEdge.Top => 2,
+            _ => 0,
+        };
+        _refresh.Text = settings.RefreshMinutes.ToString(CultureInfo.InvariantCulture);
+        _offset.Text = settings.RailOffset.ToString(CultureInfo.InvariantCulture);
+
+        RenderCodexAccounts();
+    }
+
+    /// <summary>Shows what each service last said, so Settings answers "is it working?" without a hover.</summary>
+    public void RefreshStatus()
+    {
+        foreach (var provider in ProviderCatalog.All)
+        {
+            if (!_status.TryGetValue(provider, out var text)) continue;
+
+            var settings = AppSettings.Current;
+            if (!settings.Enabled.Contains(provider))
+            {
+                text.Text = "off";
+                text.Foreground = Theme.SecondaryBrush;
+                continue;
+            }
+
+            var key = AccountKey.Primary(provider);
+            var state = _store.StateFor(key);
+
+            if (state?.Reading is { } reading)
+            {
+                var figure = reading.HeadlineFraction is { } fraction
+                    ? RingControl.PercentText(fraction)
+                    : reading.RailMoney ?? "read";
+
+                text.Text = state.LastFailure is null
+                    ? $"{figure} used"
+                    : $"{figure} (stale)";
+                text.Foreground = state.LastFailure is null ? Theme.PrimaryBrush : Theme.WarningBrush;
+            }
+            else if (state?.LastFailure is { } failure)
+            {
+                text.Text = failure.Message();
+                text.Foreground = Theme.WarningBrush;
+            }
+            else
+            {
+                text.Text = "not checked yet";
+                text.Foreground = Theme.SecondaryBrush;
+            }
+
+            // An unset credential is worth saying up front rather than only after a
+            // failed check.
+            if (provider.UsesApiKey() && !CredentialStore.Has(provider)
+                && !(provider == Provider.OpenCodeGo && OpenCodeGoService.StoredKey() is not null)
+                && !(provider == Provider.Zhipu && ZhipuService.StoredKey(provider) is not null))
+            {
+                text.Text = "needs a key";
+                text.Foreground = Theme.WarningBrush;
+            }
+        }
+
+        RenderCodexAccounts();
+    }
+
+    private void RenderCodexAccounts()
+    {
+        _codexAccounts.Children.Clear();
+        var settings = AppSettings.Current;
+
+        if (!settings.Enabled.Contains(Provider.Codex))
+        {
+            _codexAccounts.Children.Add(Caption("Switch Codex on to add accounts."));
+            return;
+        }
+
+        var added = settings.Accounts.Where(a => a.Key.Provider == Provider.Codex && !a.Key.IsPrimary).ToList();
+
+        foreach (var account in added)
+        {
+            var row = new Grid { Margin = new Thickness(0, 4, 0, 4) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = account.DisplayLabel,
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = Theme.PrimaryBrush,
+            };
+            Grid.SetColumn(label, 0);
+            row.Children.Add(label);
+
+            var remove = new Button
+            {
+                Content = "Remove",
+                FontSize = 11,
+                Padding = new Thickness(10, 4, 10, 4),
+                Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+                Foreground = Theme.PrimaryBrush,
+                BorderBrush = Theme.Brush(Theme.Stroke),
+            };
+            remove.Click += (_, _) =>
+            {
+                settings.Accounts.Remove(account);
+                settings.Save();
+                SettingsChanged?.Invoke();
+                RefreshStatus();
+            };
+            Grid.SetColumn(remove, 1);
+            row.Children.Add(remove);
+
+            _codexAccounts.Children.Add(row);
+        }
+
+        _codexAccounts.Children.Add(AddAccountRow(settings));
+    }
+
+    private UIElement AddAccountRow(AppSettings settings)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
+
+        var label = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5), Text = "" };
+        StyleField(label);
+        label.ToolTip = "What to call this account on the rail.";
+
+        var token = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
+        StyleField(token);
+        token.ToolTip = "The account's Codex access token. Sent as the bearer for this ring only.";
+
+        var accountId = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
+        StyleField(accountId);
+        accountId.ToolTip =
+            "The ChatGPT account id this token belongs to. Sent as ChatGPT-Account-Id, and required for a "
+            + "second account: without it the service may answer for whichever login it likes.";
+
+        var add = new Button
+        {
+            Content = "Add account",
+            FontSize = 11.5,
+            Padding = new Thickness(12, 5, 12, 5),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Foreground = Theme.PrimaryBrush,
+            BorderBrush = Theme.Brush(Theme.Stroke),
+        };
+
+        add.Click += (_, _) =>
+        {
+            if (token.Text.Trim().Length == 0 || accountId.Text.Trim().Length == 0) return;
+
+            settings.Accounts.Add(new MonitoredAccount
+            {
+                Key = new AccountKey(Provider.Codex, $"codex-{Guid.NewGuid():N}"[..14]),
+                Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : "Codex account",
+                Enabled = true,
+                AccessToken = token.Text.Trim(),
+                ServiceAccountId = accountId.Text.Trim(),
+            });
+            settings.Save();
+            SettingsChanged?.Invoke();
+            RefreshStatus();
+        };
+
+        panel.Children.Add(label);
+        panel.Children.Add(token);
+        panel.Children.Add(accountId);
+        panel.Children.Add(add);
+        return panel;
+    }
+}
