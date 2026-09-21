@@ -340,6 +340,57 @@ without a restart. The light palette is not the dark one inverted: the warning c
 is a deeper amber, because the dark theme's amber on white fails contrast and a
 warning nobody can read is not a warning.
 
+**Surface** — Solid, or Acrylic with a transparency slider.
+
+### A backdrop change alters the number of layers, so the surface is remade
+
+Reported as "the rectangle underneath is still grey". The setting was on **Solid**,
+where a nearly opaque slab is exactly right — but underneath that was a real bug, and
+the report's wording pointed straight at it.
+
+`Theme.Card` returns **two** layers when solid (one to cast the shadow, one for the
+surface) and **one** when translucent, because two translucent layers stack: a surface
+meant to be 55% opaque comes out at 80%. But the rail built its card **once, in the
+constructor**, and `ApplyTheme` only recoloured what was there. So switching from
+Solid to Acrylic kept the pair and stacked two 55% layers — darker and flatter than
+either setting promises, and precisely the "still grey" that was reported.
+
+The surface is now remade rather than recoloured, which is the only way a change in
+layer *count* can take effect. `ApplyTheme` rebuilds the card, re-parents the rows
+into it, and re-docks.
+
+### Transparency is a slider, not a third preset
+
+"How transparent" is a degree, and the reader who wants to see their wallpaper through
+the rail and the reader who has to read it over a photograph do not want the same
+number. The slider goes to 85% transparent; the setting stores opacity.
+
+Measured against a white panel placed behind the rail:
+
+| Surface | Setting | Measured |
+|---|---|---:|
+| Solid | — (slider ignored) | **99%** |
+| Acrylic | 55% | **56%** |
+| Acrylic | 30% | **32%** |
+| Acrylic | 85% | **85%** |
+
+The 56% is the point: it is the configured value, not the 80% the stacked pair used to
+produce.
+
+The slider raises **its own event**, not `SettingsChanged`. That one makes the
+controller rebuild the Settings window, because a palette change has to redraw every
+control in it — and a slider that redraws the window it lives in while it is being
+dragged destroys its own thumb. Transparency touches the rail and nothing in Settings,
+so it asks for exactly that. It is debounced on top, since a drag raises
+`ValueChanged` on every pixel.
+
+**Theme** — Dark, Light, or Follow Windows (the default, read from the same registry
+value Explorer's light/dark switch writes). The palettes are rebuilt in place rather
+than captured per surface, so a change re-skins the rail, its menus and Settings
+without a restart. The light palette is not the dark one inverted: the warning colour
+is a deeper amber, because the dark theme's amber on white fails contrast and a
+warning nobody can read is not a warning.
+
 **Surface** — Solid, or Acrylic.
 
 ### Acrylic is translucent, not blurred, and that was measured

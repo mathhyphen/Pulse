@@ -123,8 +123,14 @@ public static class Theme
     public static FontFamily Font { get; } =
         new("Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI, Microsoft YaHei, SimSun");
 
-    /// <summary>Rebuilds every brush for the chosen theme and backdrop.</summary>
-    public static void Apply(AppTheme theme, Backdrop backdrop)
+    /// <summary>
+    /// Rebuilds every brush for the chosen theme, backdrop and surface opacity.
+    /// </summary>
+    /// <param name="opacity">
+    /// How opaque a translucent surface is. Ignored when solid, which is opaque by
+    /// definition.
+    /// </param>
+    public static void Apply(AppTheme theme, Backdrop backdrop, double opacity = 0.55)
     {
         IsDark = theme switch
         {
@@ -174,7 +180,12 @@ public static class Theme
         // Acrylic needs something to see through. At the solid opacity the blur is
         // behind an almost-opaque slab and the setting does nothing visible, which is
         // worse than not offering it.
-        var alpha = backdrop == Backdrop.Acrylic ? (byte)0x8C : (byte)0xF0;
+        // A translucent surface is a degree, not a choice between two of them, so the
+        // reader sets it: see AppSettings.SurfaceOpacity. Solid ignores the number,
+        // being opaque by definition.
+        var alpha = backdrop == Backdrop.Acrylic
+            ? (byte)Math.Round(Math.Clamp(opacity, 0.15, 1.0) * 255)
+            : (byte)0xF0;
 
         SurfaceBrush = Brush(Argb(alpha, Surface.R, Surface.G, Surface.B));
         SurfaceShadowBrush = Brush(Argb(alpha, Surface.R, Surface.G, Surface.B));

@@ -118,6 +118,21 @@ public sealed class AppSettings
     public Backdrop Backdrop { get; set; } = Backdrop.Acrylic;
 
     /// <summary>
+    /// How opaque the translucent surface is, 0.15 to 1.
+    /// </summary>
+    /// <remarks>
+    /// A slider rather than a third preset, because "transparent" is a degree and not
+    /// a choice between two of them: the reader who wants to see their wallpaper
+    /// through the rail and the reader who has to read it over a photograph do not
+    /// want the same number, and neither wants to be told which they are.
+    /// <para>
+    /// Applies to the acrylic surface only. Solid is opaque by definition, and carries
+    /// the shadow a translucent surface cannot.
+    /// </para>
+    /// </remarks>
+    public double SurfaceOpacity { get; set; } = 0.55;
+
+    /// <summary>
     /// Whether the rail is dimmed to a thin sliver when nothing needs attention.
     /// Pulse calls it auto-collapse.
     /// </summary>

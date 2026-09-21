@@ -42,7 +42,7 @@ public sealed class AppController
         // brushes from here, and a window built first would keep the old ones for
         // its whole life.
         Loc.Initialise(settings.Language);
-        Theme.Apply(settings.Theme, settings.Backdrop);
+        Theme.Apply(settings.Theme, settings.Backdrop, settings.SurfaceOpacity);
 
         _store.Changed += OnStoreChanged;
 
@@ -152,7 +152,7 @@ public sealed class AppController
 
                 // A palette change is a rebuild too, not a relabel: every brush was
                 // captured when its surface was made.
-                Theme.Apply(settings.Theme, settings.Backdrop);
+                Theme.Apply(settings.Theme, settings.Backdrop, settings.SurfaceOpacity);
                 _rail?.ApplyTheme();
 
                 // **Deferred.** This handler is raised from a control inside Settings,
@@ -172,6 +172,18 @@ public sealed class AppController
                 // wait for the next tick to say whether it works.
                 _ = RefreshAsync();
             };
+
+            // Transparency touches the rail's surface and nothing in Settings, so it
+            // does not go through SettingsChanged — that one rebuilds this window, and
+            // rebuilding a window while its own slider is being dragged destroys the
+            // thumb mid-gesture.
+            _settings.SurfaceOpacityChanged += () =>
+            {
+                var settings = AppSettings.Current;
+                Theme.Apply(settings.Theme, settings.Backdrop, settings.SurfaceOpacity);
+                _rail?.ApplyTheme();
+            };
+
             _settings.Closed += (_, _) => _settings = null;
         }
 
@@ -264,4 +276,5 @@ public sealed class AppController
         Application.Current?.Shutdown();
     }
 }
+
 

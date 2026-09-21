@@ -210,10 +210,16 @@ public sealed class EnglishStrings : Strings
     public override string SettingsBackdropAcrylic => "Acrylic (translucent)";
 
     public override string SettingsBackdropNote =>
-        "Acrylic makes the rail translucent, so what is behind it shows through. "
-        + "It is not blurred, and cannot be: Windows' blur interfaces refuse to apply to a layered window, "
-        + "and a layered window is what gives this rail its antialiased rounded corners and its shadow. "
-        + "Getting real blur would mean giving both of those up.";
+        "Acrylic makes the rail translucent, so what is behind it shows through, and the rounded corners "
+        + "stay. It is not blurred, and cannot be: Windows' blur interfaces refuse to apply to a layered "
+        + "window, and a layered window is what gives this rail its antialiased corners and its shadow. "
+        + "How far through is the transparency below.";
+
+    public override string SettingsOpacity => "Transparency";
+
+    public override string SettingsOpacityNote =>
+        "How much of the surface to take away. At zero it is the solid slab; higher lets more of the desktop "
+        + "through, and the figures get harder to read against a busy background.";
 
     public override string SettingsStatusOff => "off";
 

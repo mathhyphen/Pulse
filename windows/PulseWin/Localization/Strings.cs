@@ -234,6 +234,10 @@ public abstract class Strings
 
     public abstract string SettingsBackdropNote { get; }
 
+    public abstract string SettingsOpacity { get; }
+
+    public abstract string SettingsOpacityNote { get; }
+
     public abstract string SettingsStatusOff { get; }
 
     public abstract string SettingsStatusNotChecked { get; }

@@ -22,12 +22,15 @@ namespace PulseWin.Ui;
 internal sealed class RailWindow : Window
 {
     private readonly StackPanel _rows = new();
-    private readonly Grid _surface;
-    private readonly Border? _background;
-    private readonly Border _content;
     private readonly DetailCard _card = new();
     private readonly Dictionary<AccountKey, RailRow> _byKey = new();
     private RailRow? _hovered;
+
+    // Not readonly: a backdrop change alters how many layers the slab has, so these
+    // are replaced rather than recoloured. See BuildSurface.
+    private Grid _surface;
+    private Border? _background;
+    private Border _content;
 
     private bool _dragging;
     private Point _dragGrab;
@@ -69,17 +72,10 @@ internal sealed class RailWindow : Window
 
         _rows.Margin = new Thickness(5, 8, 5, 8);
 
-        var (root, content) = Theme.Card(new CornerRadius(0, 13, 13, 0), 0);
-        content.Child = _rows;
-        root.ContextMenu = BuildMenu();
-        _surface = root;
-
-        // Kept so the rounding can follow the docking edge. The two layers are the
-        // shadow and the surface — see Theme.Card for why they are separate.
-        _background = root.Children.Count > 1 ? (Border)root.Children[0] : null;
-        _content = content;
-
-        Content = root;
+        // Built by BuildSurface, and rebuilt whenever the surface's *shape* changes —
+        // see the note on ApplyTheme.
+        (_surface, _background, _content) = BuildSurface();
+        Content = _surface;
 
         MouseRightButtonUp += (_, _) => _surface.ContextMenu.IsOpen = true;
 
@@ -532,30 +528,54 @@ internal sealed class RailWindow : Window
     }
 
     /// <summary>
+    /// Builds the slab the rows sit on, and hands back its layers.
+    /// </summary>
+    /// <remarks>
+    /// <b>A backdrop change alters the number of layers, so the surface has to be
+    /// made again rather than recoloured.</b> <see cref="Theme.Card"/> returns two
+    /// layers when solid — one to cast the shadow, one for the surface — and one when
+    /// translucent, because two translucent layers stack and a surface meant to be 55%
+    /// opaque comes out at 80%. Recolouring the existing pair therefore kept the pair:
+    /// switching from Solid to Acrylic left two 55% layers on top of each other, which
+    /// is darker and flatter than either setting promises. That is what "the rectangle
+    /// underneath is still grey" was.
+    /// </remarks>
+    private (Grid Surface, Border? Background, Border Content) BuildSurface()
+    {
+        var (root, content) = Theme.Card(Theme.DockedCorners(_edge, 13), 0);
+
+        // Re-parenting is the repaint: a element can only have one parent, so putting
+        // the rows into the new content detaches them from the old one.
+        content.Child = _rows;
+        root.ContextMenu = BuildMenu();
+
+        var background = root.Children.Count > 1 ? (Border)root.Children[0] : null;
+        return (root, background, content);
+    }
+
+    /// <summary>
     /// Re-reads the palette for a theme or backdrop change.
     /// </summary>
     /// <remarks>
     /// The card and the menus are built fresh when they open, so they pick the new
-    /// palette up on their own. The rail is not: its surface, its rows and the shape
-    /// of the shadow were all made once, so they are remade here.
+    /// palette up on their own. The rail is not: its rows captured their brushes when
+    /// they were made, and its surface may not even have the same number of layers any
+    /// more, so both are remade here.
     /// </remarks>
     public void ApplyTheme()
     {
         var corners = Theme.DockedCorners(_edge, 13);
 
-        if (_background is not null)
-        {
-            _background.CornerRadius = corners;
-            _background.Background = Theme.SurfaceShadowBrush;
-        }
-
-        _content.CornerRadius = corners;
-        _content.Background = Theme.SurfaceBrush;
-        _content.BorderBrush = Theme.StrokeBrush;
-
-        _surface.ContextMenu = BuildMenu();
+        // Remade, not recoloured — see BuildSurface.
+        (_surface, _background, _content) = BuildSurface();
+        Content = _surface;
+        ApplyCorners(_edge);
 
         foreach (var row in _byKey.Values) row.ApplyTheme();
+
+        // The window's own size can change with the backdrop, since the solid shape
+        // carries a shadow and the translucent one does not.
+        SetOrientation(_horizontal);
     }
 
     // There is deliberately no backdrop call here.

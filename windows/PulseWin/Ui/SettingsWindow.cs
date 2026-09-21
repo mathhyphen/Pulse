@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using PulseWin.Auth;
 using PulseWin.Core;
 using PulseWin.Localization;
@@ -39,6 +40,12 @@ internal sealed class SettingsWindow : Window
     private readonly TextBox _currency = new();
 
     public event Action? SettingsChanged;
+
+    /// <summary>
+    /// The rail's transparency changed. Deliberately separate from
+    /// <see cref="SettingsChanged"/> — see <c>OpacityRow</c>.
+    /// </summary>
+    public event Action? SurfaceOpacityChanged;
 
     public SettingsWindow(UsageStore store)
     {
@@ -182,8 +189,95 @@ internal sealed class SettingsWindow : Window
             Foreground = Theme.SecondaryBrush,
         });
 
+        panel.Children.Add(OpacityRow());
+
         block.Child = panel;
         return block;
+    }
+
+    /// <summary>
+    /// The transparency slider, for the translucent surface only.
+    /// </summary>
+    /// <remarks>
+    /// <b>This raises its own event rather than <see cref="SettingsChanged"/>.</b> That
+    /// event makes the controller rebuild this window, because a palette change has to
+    /// redraw every control in it — and a slider that redraws the window it lives in
+    /// while it is being dragged destroys its own thumb. Transparency touches the
+    /// rail's surface and nothing in this window, so it asks for exactly that.
+    /// <para>
+    /// Debounced, for the other half of the same reason: a drag raises
+    /// <c>ValueChanged</c> on every pixel, and remaking the rail's surface sixty times
+    /// a second to land on the last one is work nobody sees.
+    /// </para>
+    /// </remarks>
+    private UIElement OpacityRow()
+    {
+        var settings = AppSettings.Current;
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 0) };
+        row.Children.Add(Label(Loc.Current.SettingsOpacity));
+
+        var readout = new TextBlock
+        {
+            FontSize = 12,
+            Width = 46,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(10, 0, 0, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+
+        var slider = new Slider
+        {
+            Width = 260,
+            Minimum = 0,
+            Maximum = 85,
+            SmallChange = 5,
+            LargeChange = 15,
+            VerticalAlignment = VerticalAlignment.Center,
+            // The slider reads as "how transparent", the setting is stored as "how
+            // opaque", and only one of those is what a reader is asking for.
+            Value = Math.Round((1 - settings.SurfaceOpacity) * 100),
+            IsEnabled = settings.Backdrop == Backdrop.Acrylic,
+        };
+
+        var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(180) };
+        settle.Tick += (_, _) =>
+        {
+            settle.Stop();
+            var chosen = Math.Clamp(1 - slider.Value / 100, 0.15, 1.0);
+            if (Math.Abs(chosen - AppSettings.Current.SurfaceOpacity) < 0.005) return;
+
+            AppSettings.Current.SurfaceOpacity = chosen;
+            AppSettings.Current.Save();
+            SurfaceOpacityChanged?.Invoke();
+        };
+
+        void Show() => readout.Text = $"{Math.Round(slider.Value)}%";
+
+        slider.ValueChanged += (_, _) =>
+        {
+            Show();
+            settle.Stop();
+            settle.Start();
+        };
+
+        Show();
+
+        row.Children.Add(slider);
+        row.Children.Add(readout);
+
+        var stack = new StackPanel();
+        stack.Children.Add(row);
+        stack.Children.Add(new TextBlock
+        {
+            Text = Loc.Current.SettingsOpacityNote,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 6, 0, 0),
+            Foreground = Theme.SecondaryBrush,
+        });
+
+        return stack;
     }
 
     private static TextBlock Label(string text) => new()
