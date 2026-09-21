@@ -81,10 +81,12 @@ public sealed class RingControl : FrameworkElement
         var radius = outer - RingThickness / 2;
 
         // The track. Always drawn, so "nothing spent" is distinguishable from
-        // "no data".
-        var trackOpacity = HasReading ? 0.22 : 0.10;
-        var track = new Pen(new SolidColorBrush(Color.FromArgb(
-            (byte)(255 * trackOpacity), 0xFF, 0xFF, 0xFF)), RingThickness);
+        // "no data" — and dimmed further when there is no reading at all.
+        var trackColour = Theme.RingTrack;
+        if (!HasReading)
+            trackColour = Color.FromArgb((byte)(trackColour.A / 2), trackColour.R, trackColour.G, trackColour.B);
+
+        var track = new Pen(new SolidColorBrush(trackColour), RingThickness);
         track.Freeze();
         dc.DrawEllipse(null, track, centre, radius, radius);
 
@@ -93,7 +95,7 @@ public sealed class RingControl : FrameworkElement
         // a reset and no length gets no arc, rather than one nobody reported.
         if (!double.IsNaN(ElapsedFraction) && radius + RingThickness / 2 + ClockThickness <= outer + 1)
         {
-            var clockPen = new Pen(new SolidColorBrush(Color.FromArgb(0x55, 0xFF, 0xFF, 0xFF)), ClockThickness)
+            var clockPen = new Pen(new SolidColorBrush(Theme.RingClock), ClockThickness)
             {
                 StartLineCap = PenLineCap.Round,
                 EndLineCap = PenLineCap.Round,
@@ -155,11 +157,11 @@ public sealed class RingControl : FrameworkElement
     private void DrawMark(DrawingContext dc, Point centre, double size)
     {
         var box = size * 0.52;
-        var brush = new SolidColorBrush(Color.FromRgb(0xF2, 0xF2, 0xF7))
+        var brush = new SolidColorBrush(Theme.RingMark)
         {
             // Dimmed when there is no reading, the same signal the arc and the
             // figure use for "this one has nothing to say".
-            Opacity = HasReading ? 0.92 : 0.34,
+            Opacity = HasReading ? 1.0 : 0.38,
         };
         brush.Freeze();
 

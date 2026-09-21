@@ -47,7 +47,7 @@ internal sealed class SettingsWindow : Window
         Width = 620;
         Height = 720;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = Theme.Brush(Color.FromRgb(0x14, 0x14, 0x16));
+        Background = Theme.WindowBrush;
         FontFamily = Theme.Font;
         Foreground = Theme.PrimaryBrush;
 
@@ -56,24 +56,29 @@ internal sealed class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Draws the whole window from the current language.
+    /// Draws the whole window from the current language and palette.
     /// </summary>
     /// <remarks>
-    /// Every string here is baked in at construction, so changing the language has
-    /// to redraw rather than relabel. Rebuilding wholesale is the honest version of
-    /// that: the alternative is a second code path that updates existing elements,
-    /// which would drift from this one and be wrong in the half nobody looks at.
+    /// Every string and every brush here is baked in at construction, so a change to
+    /// either has to redraw rather than relabel. Rebuilding wholesale is the honest
+    /// version of that: the alternative is a second code path that updates existing
+    /// elements, which would drift from this one and be wrong in the half nobody
+    /// looks at.
     /// </remarks>
-    private void Rebuild()
+    public void Rebuild()
     {
         _status.Clear();
         _keyFields.Clear();
 
         Title = Loc.Current.SettingsTitle;
+        Background = Theme.WindowBrush;
 
         var panel = new StackPanel { Margin = new Thickness(22) };
 
-        // Language first, because it changes everything under it.
+        // Appearance and language first, because they change everything under them.
+        panel.Children.Add(Heading(Loc.Current.SettingsAppearance, 15));
+        panel.Children.Add(AppearanceBlock());
+
         panel.Children.Add(Heading(Loc.Current.SettingsLanguage, 15));
         panel.Children.Add(LanguageBlock());
 
@@ -100,6 +105,114 @@ internal sealed class SettingsWindow : Window
         };
 
         RefreshStatus();
+    }
+
+    /// <summary>
+    /// The theme and surface pickers.
+    /// </summary>
+    /// <remarks>
+    /// Both are offered rather than decided. A palette is a preference — a reader on
+    /// a bright desk and a reader at night want different answers, and Windows' own
+    /// setting is only right for whoever set it — and acrylic is a trade: it is the
+    /// look the rail is designed around, and blur-behind is known to cost smoothness
+    /// while a window is being dragged.
+    /// </remarks>
+    private UIElement AppearanceBlock()
+    {
+        var block = Block();
+        var panel = new StackPanel();
+
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+
+        row.Children.Add(Label(Loc.Current.SettingsTheme));
+
+        var theme = new ComboBox
+        {
+            FontSize = 12,
+            Width = 150,
+            Margin = new Thickness(0, 0, 18, 0),
+            ItemsSource = new[]
+            {
+                Loc.Current.SettingsThemeFollowWindows,
+                Loc.Current.SettingsThemeDark,
+                Loc.Current.SettingsThemeLight,
+            },
+            SelectedIndex = AppSettings.Current.Theme switch
+            {
+                AppTheme.Dark => 1,
+                AppTheme.Light => 2,
+                _ => 0,
+            },
+        };
+        theme.SelectionChanged += (_, _) => ApplyAppearance(
+            theme.SelectedIndex switch
+            {
+                1 => AppTheme.Dark,
+                2 => AppTheme.Light,
+                _ => AppTheme.FollowWindows,
+            },
+            null);
+        row.Children.Add(theme);
+
+        row.Children.Add(Label(Loc.Current.SettingsBackdrop));
+
+        var backdrop = new ComboBox
+        {
+            FontSize = 12,
+            Width = 150,
+            ItemsSource = new[]
+            {
+                Loc.Current.SettingsBackdropSolid,
+                Loc.Current.SettingsBackdropAcrylic,
+            },
+            SelectedIndex = AppSettings.Current.Backdrop == Backdrop.Acrylic ? 1 : 0,
+        };
+        backdrop.SelectionChanged += (_, _) => ApplyAppearance(
+            null,
+            backdrop.SelectedIndex == 1 ? Backdrop.Acrylic : Backdrop.Solid);
+        row.Children.Add(backdrop);
+
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            Text = Loc.Current.SettingsBackdropNote,
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 8, 0, 0),
+            Foreground = Theme.SecondaryBrush,
+        });
+
+        block.Child = panel;
+        return block;
+    }
+
+    private static TextBlock Label(string text) => new()
+    {
+        Text = text,
+        FontSize = 12,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 9, 0),
+        Foreground = Theme.PrimaryBrush,
+    };
+
+    /// <summary>Writes whichever of the two changed, and asks the controller to re-skin.</summary>
+    private void ApplyAppearance(AppTheme? theme, Backdrop? backdrop)
+    {
+        var settings = AppSettings.Current;
+
+        if (theme is { } chosen && chosen != settings.Theme)
+        {
+            settings.Theme = chosen;
+            settings.Save();
+            SettingsChanged?.Invoke();
+        }
+
+        if (backdrop is { } surface && surface != settings.Backdrop)
+        {
+            settings.Backdrop = surface;
+            settings.Save();
+            SettingsChanged?.Invoke();
+        }
     }
 
     /// <summary>
@@ -178,8 +291,8 @@ internal sealed class SettingsWindow : Window
 
     private Border Block() => new()
     {
-        Background = Theme.Brush(Color.FromRgb(0x1F, 0x1F, 0x23)),
-        BorderBrush = Theme.Brush(Theme.Stroke),
+        Background = Theme.PanelBrush,
+        BorderBrush = Theme.StrokeBrush,
         BorderThickness = new Thickness(1),
         CornerRadius = new CornerRadius(9),
         Padding = new Thickness(13),
@@ -255,9 +368,9 @@ internal sealed class SettingsWindow : Window
         {
             FontSize = 12,
             Padding = new Thickness(7, 5, 7, 5),
-            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Background = Theme.FieldBrush,
             Foreground = Theme.PrimaryBrush,
-            BorderBrush = Theme.Brush(Theme.Stroke),
+            BorderBrush = Theme.StrokeBrush,
             // The field starts empty even when a key is stored. Writing an existing
             // secret back into a text field so it can be read off the screen is the
             // one convenience not worth having.
@@ -294,9 +407,9 @@ internal sealed class SettingsWindow : Window
             FontSize = 11,
             Padding = new Thickness(10, 4, 10, 4),
             Margin = new Thickness(7, 0, 0, 0),
-            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Background = Theme.FieldBrush,
             Foreground = Theme.PrimaryBrush,
-            BorderBrush = Theme.Brush(Theme.Stroke),
+            BorderBrush = Theme.StrokeBrush,
         };
         clear.Click += (_, _) =>
         {
@@ -516,9 +629,9 @@ internal sealed class SettingsWindow : Window
     {
         field.FontSize = 12;
         field.Padding = new Thickness(7, 5, 7, 5);
-        field.Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30));
+        field.Background = Theme.FieldBrush;
         field.Foreground = Theme.PrimaryBrush;
-        field.BorderBrush = Theme.Brush(Theme.Stroke);
+        field.BorderBrush = Theme.StrokeBrush;
     }
 
     // -------------------------------------------------------------- behaviour
@@ -678,9 +791,9 @@ internal sealed class SettingsWindow : Window
                 Content = Loc.Current.SettingsRemove,
                 FontSize = 11,
                 Padding = new Thickness(10, 4, 10, 4),
-                Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+                Background = Theme.FieldBrush,
                 Foreground = Theme.PrimaryBrush,
-                BorderBrush = Theme.Brush(Theme.Stroke),
+                BorderBrush = Theme.StrokeBrush,
             };
             remove.Click += (_, _) =>
             {
@@ -706,9 +819,9 @@ internal sealed class SettingsWindow : Window
             Padding = new Thickness(12, 5, 12, 5),
             Margin = new Thickness(0, 8, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Left,
-            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Background = Theme.FieldBrush,
             Foreground = Theme.PrimaryBrush,
-            BorderBrush = Theme.Brush(Theme.Stroke),
+            BorderBrush = Theme.StrokeBrush,
         };
         signIn.Click += (_, _) => SignInAnotherAccount();
         _codexAccounts.Children.Add(signIn);
@@ -750,3 +863,5 @@ internal sealed class SettingsWindow : Window
         RefreshStatus();
     }
 }
+
+

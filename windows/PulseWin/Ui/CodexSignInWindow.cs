@@ -45,7 +45,7 @@ internal sealed class CodexSignInWindow : Window
         SizeToContent = SizeToContent.Height;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        Background = Theme.Brush(Color.FromRgb(0x14, 0x14, 0x16));
+        Background = Theme.WindowBrush;
         FontFamily = Theme.Font;
         Foreground = Theme.PrimaryBrush;
 
@@ -192,11 +192,13 @@ internal sealed class CodexSignInWindow : Window
             FontSize = 11.5,
             Padding = new Thickness(12, 5, 12, 5),
             Margin = new Thickness(0, 0, 7, 0),
-            Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
+            Background = Theme.FieldBrush,
             Foreground = Theme.PrimaryBrush,
-            BorderBrush = Theme.Brush(Theme.Stroke),
+            BorderBrush = Theme.StrokeBrush,
         };
         button.Click += (_, _) => action();
         return button;
     }
 }
+
+

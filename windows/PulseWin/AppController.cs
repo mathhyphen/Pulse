@@ -38,9 +38,11 @@ public sealed class AppController
         settings.Normalise();
         settings.Save();
 
-        // Before anything is drawn: every surface below reads its strings from
-        // here, and a window built first would keep the old language for its life.
+        // Before anything is drawn: every surface below reads its strings and its
+        // brushes from here, and a window built first would keep the old ones for
+        // its whole life.
         Loc.Initialise(settings.Language);
+        Theme.Apply(settings.Theme, settings.Backdrop);
 
         _store.Changed += OnStoreChanged;
 
@@ -138,6 +140,17 @@ public sealed class AppController
                 Loc.Setting = settings.Language;
                 _rail?.RefreshLanguage();
                 _tray?.RefreshLanguage();
+
+                // A palette change is a rebuild too, not a relabel: every brush was
+                // captured when its surface was made.
+                Theme.Apply(settings.Theme, settings.Backdrop);
+                _rail?.ApplyTheme();
+
+                // **Deferred.** This handler is raised from a control inside Settings,
+                // and rebuilding that window destroys the very ComboBox still in the
+                // middle of raising the event. Letting the event finish first is the
+                // difference between a re-skin and a crash.
+                Application.Current?.Dispatcher.BeginInvoke(() => _settings?.Rebuild());
 
                 if (settings.RailVisible && _rail is { IsVisible: false }) _rail.Show();
                 if (_rail is not null)

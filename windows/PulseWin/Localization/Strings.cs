@@ -216,6 +216,24 @@ public abstract class Strings
 
     public abstract string SettingsLanguageAuto { get; }
 
+    public abstract string SettingsAppearance { get; }
+
+    public abstract string SettingsTheme { get; }
+
+    public abstract string SettingsThemeFollowWindows { get; }
+
+    public abstract string SettingsThemeDark { get; }
+
+    public abstract string SettingsThemeLight { get; }
+
+    public abstract string SettingsBackdrop { get; }
+
+    public abstract string SettingsBackdropSolid { get; }
+
+    public abstract string SettingsBackdropAcrylic { get; }
+
+    public abstract string SettingsBackdropNote { get; }
+
     public abstract string SettingsStatusOff { get; }
 
     public abstract string SettingsStatusNotChecked { get; }

@@ -265,7 +265,7 @@ internal sealed class DetailCard : Popup
     {
         Height = 1,
         Margin = new Thickness(0, 9, 0, 9),
-        Background = Theme.Brush(Theme.Stroke),
+        Background = Theme.StrokeBrush,
     };
 
     private static string Ago(DateTimeOffset when)
@@ -280,3 +280,4 @@ internal sealed class DetailCard : Popup
         return strings.AgoDays((int)span.TotalDays);
     }
 }
+

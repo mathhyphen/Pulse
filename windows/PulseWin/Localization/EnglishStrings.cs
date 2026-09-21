@@ -193,6 +193,28 @@ public sealed class EnglishStrings : Strings
 
     public override string SettingsLanguageAuto => "Follow Windows";
 
+    public override string SettingsAppearance => "Appearance";
+
+    public override string SettingsTheme => "Theme";
+
+    public override string SettingsThemeFollowWindows => "Follow Windows";
+
+    public override string SettingsThemeDark => "Dark";
+
+    public override string SettingsThemeLight => "Light";
+
+    public override string SettingsBackdrop => "Surface";
+
+    public override string SettingsBackdropSolid => "Solid";
+
+    public override string SettingsBackdropAcrylic => "Acrylic (translucent)";
+
+    public override string SettingsBackdropNote =>
+        "Acrylic makes the rail translucent, so what is behind it shows through. "
+        + "It is not blurred, and cannot be: Windows' blur interfaces refuse to apply to a layered window, "
+        + "and a layered window is what gives this rail its antialiased rounded corners and its shadow. "
+        + "Getting real blur would mean giving both of those up.";
+
     public override string SettingsStatusOff => "off";
 
     public override string SettingsStatusNotChecked => "not checked yet";

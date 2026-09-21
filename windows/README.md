@@ -207,6 +207,22 @@ Removing an account removes its login with it. Leaving the refresh token behind
 would keep a credential for an account the reader has just taken off the rail, and
 re-adding would silently inherit it.
 
+### The top edge is a bar, not a rotated strip
+
+The two orientations are genuinely different layouts:
+
+- On a **side edge** the ring sits at the top of each item and the figure below it,
+  because there is no width to put the figure beside.
+- On the **top edge** the figure sits *beside* the ring, in a fixed column so the
+  figures line up. Below would work, but it makes the strip 77 pixels thick to carry
+  an 11-pixel line of text, and a strip across the top of the screen is read as a
+  bar — the thick version reads as a panel that happens to be up there.
+
+The first version of this only ever set a `Height`, so on the top edge each item
+shrank to the width of its ring and the items touched. Nothing was wrong with the
+spacing value: there simply was not one. Measured after the fix, four accounts on the
+top edge: **398×52**, where it had been 77 pixels thick.
+
 ### Moving the rail
 
 Drag it anywhere with the left button. Let go:
@@ -248,6 +264,47 @@ rather than at each call site, so the next caller cannot forget it.
 
 Verified by injecting a real drag and reading the window rectangle after each step:
 ten 12-pixel moves, **zero drift**, with the grab offset preserved.
+
+## Appearance
+
+**Theme** — Dark, Light, or Follow Windows (the default, read from the same registry
+value Explorer's light/dark switch writes). The palettes are rebuilt in place rather
+than captured per surface, so a change re-skins the rail, its menus and Settings
+without a restart. The light palette is not the dark one inverted: the warning colour
+is a deeper amber, because the dark theme's amber on white fails contrast and a
+warning nobody can read is not a warning.
+
+**Surface** — Solid, or Acrylic.
+
+### Acrylic is translucent, not blurred, and that was measured
+
+This is worth stating plainly because it is the one place the port does not deliver
+what the name suggests.
+
+Both of Windows' blur interfaces were tried against a **controlled 16-pixel
+black-and-white stripe pattern** placed behind the rail, and the result read back
+pixel by pixel:
+
+- `SetWindowCompositionAttribute` with `ACCENT_ENABLE_ACRYLICBLURBEHIND` — the call
+  everything on Windows uses for this. Neutralised for a layered window since
+  Windows 10 1803.
+- `DWMWA_SYSTEMBACKDROP_TYPE` with `DWMSBT_TRANSIENTWINDOW` — the documented one.
+  **Requires a window that is not layered.**
+
+Neither blurs. With acrylic the stripes come through individually, with single-pixel
+jumps of **122** and **178** across them; a real 30-pixel blur would have smeared
+them into a flat field. What the setting does give is a genuinely translucent surface
+— measured at 68 against 30 for solid, over the same backdrop.
+
+The reason is structural: a **layered window** (`AllowsTransparency = true`) is what
+gives this rail its antialiased rounded corners and its drop shadow, and both blur
+APIs refuse to apply to one. Real blur is reachable by dropping the layering and
+clipping the window to a region instead — at the price of hard-edged corners and no
+shadow. That is a trade to be asked about rather than made silently, so the setting
+is named for what it does and the note in Settings says so.
+
+Verified along the way: `Theme.Dark` renders the slab at `(56,56,59)` and
+`Theme.Light` at `(212,212,213)`.
 
 ## The provider marks
 

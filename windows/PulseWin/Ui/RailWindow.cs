@@ -31,6 +31,8 @@ internal sealed class RailWindow : Window
 
     private bool _dragging;
     private Point _dragGrab;
+    private bool _horizontal;
+    private RailEdge? _edge = RailEdge.Right;
 
     /// <summary>
     /// Whether a drag is in progress.
@@ -108,6 +110,12 @@ internal sealed class RailWindow : Window
         var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
         var style = GetWindowLong(handle, GwlExStyle);
         SetWindowLong(handle, GwlExStyle, style | WsExToolWindow);
+
+        // Here as well as in ApplyTheme, because this is the only point at startup
+        // where the handle exists. Without it the backdrop is applied the first time
+        // somebody touches a setting and not before — so the rail launched solid,
+        // and the setting looked like it did nothing until you toggled it twice.
+        ApplyBackdrop();
     }
 
     private const int GwlExStyle = -20;
@@ -178,7 +186,7 @@ internal sealed class RailWindow : Window
 
             if (!_byKey.TryGetValue(account.Key, out var row))
             {
-                row = new RailRow(account, state);
+                row = new RailRow(account, state, _horizontal);
                 row.PointerEntered += OnRowEntered;
                 row.PointerLeft += OnRowLeft;
                 _byKey[account.Key] = row;
@@ -198,7 +206,10 @@ internal sealed class RailWindow : Window
             }
         }
 
-        Resize();
+        // Keep the rail hugging its items: an empty rail should be a sliver, not a
+        // screen-height bar with nothing in it. SetOrientation owns the sizing — it
+        // is the one place that knows which way the rail is running.
+        SetOrientation(_horizontal);
     }
 
     private void OnRowEntered(RailRow row)
@@ -231,8 +242,8 @@ internal sealed class RailWindow : Window
         var work = bounds ?? SystemParameters.WorkArea;
         var horizontal = edge == RailEdge.Top;
 
+        _edge = edge;
         SetOrientation(horizontal);
-        Resize();
         ApplyCorners(edge);
 
         // Let the panel measure before it is positioned, or the first dock uses the
@@ -291,10 +302,16 @@ internal sealed class RailWindow : Window
     /// <summary>Leaves the rail where it was put, rounded on every side.</summary>
     private void Free(double left, double top)
     {
-        _rows.Orientation = Orientation.Vertical;
-        Width = Theme.RailWidth;
-        SizeToContent = SizeToContent.Height;
+        // A rail that is not against an edge has no edge to orient itself by, so it
+        // goes back to the vertical strip: it is the shape with room for the figure
+        // under the ring, and a bar floating in the middle of the desktop reads as a
+        // toolbar that lost its window.
+        _edge = null;
+        SetOrientation(false);
         ApplyCorners(null);
+
+        // Let it measure before it is positioned, for the same reason Dock does.
+        UpdateLayout();
 
         Left = left;
         Top = top;
@@ -316,7 +333,6 @@ internal sealed class RailWindow : Window
         _background.CornerRadius = corners;
         _content.CornerRadius = corners;
     }
-
     // ------------------------------------------------------------------ dragging
 
     /// <summary>
@@ -482,41 +498,167 @@ internal sealed class RailWindow : Window
     /// </remarks>
     private void SetOrientation(bool horizontal)
     {
+        _horizontal = horizontal;
+
         _rows.Orientation = horizontal
             ? System.Windows.Controls.Orientation.Horizontal
             : System.Windows.Controls.Orientation.Vertical;
 
         if (horizontal)
         {
-            // A top rail is a strip, so its thickness becomes the ring size plus
-            // padding and its length is whatever the rows need.
+            // A top rail is a bar: its thickness is the ring plus breathing room, and
+            // the figure sits beside the ring rather than below it (see RailRow). The
+            // margins are asymmetric on purpose — each row already carries a trailing
+            // gap, so the panel's left inset is the gap plus a little and its right
+            // inset is only what makes the two ends match.
+            _rows.Margin = new Thickness(Theme.RowGap + 4, 0, 4, 0);
             Width = double.NaN;
-            Height = Theme.RingSize + Theme.RingSpacing + 11 + 16 + 2;
+            Height = Theme.HorizontalThickness;
             SizeToContent = SizeToContent.Width;
         }
         else
         {
+            _rows.Margin = new Thickness(5, 8, 5, 8);
             Width = Theme.RailWidth;
             Height = double.NaN;
             SizeToContent = SizeToContent.Height;
         }
+
+        foreach (var row in _byKey.Values) row.SetOrientation(horizontal);
     }
 
-    private void Resize()
+    /// <summary>
+    /// Re-reads the palette for a theme or backdrop change.
+    /// </summary>
+    /// <remarks>
+    /// The card and the menus are built fresh when they open, so they pick the new
+    /// palette up on their own. The rail is not: its surface, its rows and the shape
+    /// of the shadow were all made once, so they are remade here.
+    /// </remarks>
+    public void ApplyTheme()
     {
-        // Keep the rail hugging its rows: an empty rail should be a sliver, not a
-        // screen-height bar with nothing in it.
-        if (_rows.Orientation == System.Windows.Controls.Orientation.Horizontal)
+        var corners = Theme.DockedCorners(_edge, 13);
+
+        _background.CornerRadius = corners;
+        _background.Background = Theme.SurfaceShadowBrush;
+        _content.CornerRadius = corners;
+        _content.Background = Theme.SurfaceBrush;
+        _content.BorderBrush = Theme.StrokeBrush;
+
+        _surface.ContextMenu = BuildMenu();
+
+        foreach (var row in _byKey.Values) row.ApplyTheme();
+
+        ApplyBackdrop();
+    }
+
+    /// <summary>
+    /// Turns the blurred backdrop on or off for this window.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not a documented API.</b> The documented equivalent, the DWM system
+    /// backdrop, refuses to apply to a layered window — and a layered window is what
+    /// gives this rail its rounded corners and its drop shadow, since WPF needs
+    /// <c>AllowsTransparency</c> for both. This is the call everything on Windows
+    /// uses for blur-behind on a window like that.
+    /// <para>
+    /// The WPF surface stays translucent on top of it, which is what actually lets the
+    /// blur show: at the solid opacity the tint would hide the thing the setting
+    /// exists to reveal.
+    /// </para>
+    /// </remarks>
+    private void ApplyBackdrop()
+    {
+        var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (handle == IntPtr.Zero) return;
+
+        var acrylic = Theme.Backdrop == Backdrop.Acrylic;
+
+        // The Windows 11 system backdrop. This is the documented one and the one that
+        // actually blurs; it is attempted first because the call below is the fallback
+        // that only tints on a current build.
+        try
         {
-            Height = Theme.RingSize + Theme.RingSpacing + 11 + 16 + 2;
-            SizeToContent = SizeToContent.Width;
+            var type = acrylic ? DwmsbtTransientWindow : DwmsbtNone;
+            DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref type, sizeof(int));
         }
-        else
+        catch (EntryPointNotFoundException)
         {
-            Width = Theme.RailWidth;
-            SizeToContent = SizeToContent.Height;
+        }
+        catch (DllNotFoundException)
+        {
+        }
+
+        var accent = new AccentPolicy
+        {
+            AccentState = acrylic ? AccentEnableAcrylicBlurBehind : AccentDisabled,
+            // Draw the tint on every side; without this the blur only covers the
+            // frame and the body of the window stays flat.
+            AccentFlags = 2,
+            // ABGR, and deliberately faint — the WPF surface above supplies the
+            // colour, this only has to give the blur something to tint.
+            GradientColor = Theme.IsDark
+                ? unchecked((int)0x40101014)
+                : unchecked((int)0x40F0F0F4),
+        };
+
+        var size = System.Runtime.InteropServices.Marshal.SizeOf<AccentPolicy>();
+        var pointer = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
+
+        try
+        {
+            System.Runtime.InteropServices.Marshal.StructureToPtr(accent, pointer, false);
+
+            var data = new WindowCompositionAttributeData
+            {
+                Attribute = WcaAccentPolicy,
+                Data = pointer,
+                SizeOfData = size,
+            };
+
+            SetWindowCompositionAttribute(handle, ref data);
+        }
+        catch (EntryPointNotFoundException)
+        {
+            // A Windows without the call simply does not get a blur. The solid
+            // surface is already drawn underneath it, so nothing looks broken.
+        }
+        finally
+        {
+            System.Runtime.InteropServices.Marshal.FreeHGlobal(pointer);
         }
     }
+
+    private const int WcaAccentPolicy = 19;
+    private const int AccentDisabled = 0;
+    private const int AccentEnableAcrylicBlurBehind = 4;
+    private const int DwmwaSystemBackdropType = 38;
+    private const int DwmsbtNone = 1;
+    private const int DwmsbtTransientWindow = 3;
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct AccentPolicy
+    {
+        public int AccentState;
+        public int AccentFlags;
+        public int GradientColor;
+        public int AnimationId;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WindowCompositionAttributeData
+    {
+        public int Attribute;
+        public IntPtr Data;
+        public int SizeOfData;
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SetWindowCompositionAttribute(
+        IntPtr handle, ref WindowCompositionAttributeData data);
 
     private static double Clamp(double value, double low, double high) =>
         high < low ? low : Math.Clamp(value, low, high);

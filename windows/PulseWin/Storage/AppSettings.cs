@@ -111,6 +111,12 @@ public sealed class AppSettings
     /// <summary>Which language the interface is drawn in. <c>Auto</c> follows Windows.</summary>
     public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
+    /// <summary>Which palette. <c>FollowWindows</c> reads the setting Explorer's switch writes.</summary>
+    public AppTheme Theme { get; set; } = AppTheme.FollowWindows;
+
+    /// <summary>What the rail's surface is made of.</summary>
+    public Backdrop Backdrop { get; set; } = Backdrop.Acrylic;
+
     /// <summary>
     /// Whether the rail is dimmed to a thin sliver when nothing needs attention.
     /// Pulse calls it auto-collapse.

@@ -193,6 +193,28 @@ public sealed class ChineseStrings : Strings
 
     public override string SettingsLanguageAuto => "跟随系统";
 
+    public override string SettingsAppearance => "外观";
+
+    public override string SettingsTheme => "主题";
+
+    public override string SettingsThemeFollowWindows => "跟随系统";
+
+    public override string SettingsThemeDark => "深色";
+
+    public override string SettingsThemeLight => "浅色";
+
+    public override string SettingsBackdrop => "表面";
+
+    public override string SettingsBackdropSolid => "纯色";
+
+    public override string SettingsBackdropAcrylic => "亚克力（半透明）";
+
+    public override string SettingsBackdropNote =>
+        "亚克力让悬浮条变成半透明，背后的画面会透出来。"
+        + "但**真正的背景模糊做不到**：Windows 的模糊接口要求窗口不是分层的（layered），"
+        + "而悬浮条的圆角和投影正是分层窗口带来的，两者不可兼得。"
+        + "这里给你的是半透明而不是毛玻璃——要毛玻璃就得放弃抗锯齿的圆角和投影。";
+
     public override string SettingsStatusOff => "已关闭";
 
     public override string SettingsStatusNotChecked => "尚未检查";

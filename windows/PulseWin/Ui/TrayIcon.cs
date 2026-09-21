@@ -104,7 +104,10 @@ internal sealed class TrayIcon : IDisposable
             var thickness = 4f;
             var box = new RectangleF(inset, inset, size - inset * 2, size - inset * 2);
 
-            using var track = new Pen(Color.FromArgb(90, 255, 255, 255), thickness);
+            // A mid grey rather than white: the notification area is dark on a dark
+            // taskbar and light on a light one, and a white track disappears into
+            // half of them. The arc keeps the usage green, which reads on both.
+            using var track = new Pen(Color.FromArgb(130, 132, 132, 136), thickness);
             graphics.DrawEllipse(track, box);
 
             // Three quarters gone, so the icon reads as a gauge rather than as a

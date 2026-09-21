@@ -1,127 +1,40 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using PulseWin.Core;
 using PulseWin.Services;
 using PulseWin.Storage;
 
 namespace PulseWin.Ui;
 
-/// <summary>Shared brushes and metrics, so the rail and the card cannot drift apart.</summary>
-public static class Theme
-{
-    public static readonly Color Surface = Color.FromRgb(0x1C, 0x1C, 0x1E);
-    public static readonly Color Stroke = Color.FromArgb(0x28, 0xFF, 0xFF, 0xFF);
-    public static readonly Color PrimaryText = Color.FromRgb(0xF2, 0xF2, 0xF7);
-    public static readonly Color SecondaryText = Color.FromRgb(0x9A, 0x9A, 0xA2);
-    public static readonly Color WarningText = Color.FromRgb(0xFF, 0xB3, 0x40);
-
-    /// <summary>The rail's own thickness, which the money formatter is measured against.</summary>
-    public const double RailWidth = 52;
-
-    public const double RingSize = 34;
-
-    public const double RingSpacing = 14;
-
-    public static SolidColorBrush Brush(Color colour)
-    {
-        var brush = new SolidColorBrush(colour);
-        brush.Freeze();
-        return brush;
-    }
-
-    public static readonly SolidColorBrush SurfaceBrush = Brush(Color.FromArgb(0xF0, Surface.R, Surface.G, Surface.B));
-    public static readonly SolidColorBrush PrimaryBrush = Brush(PrimaryText);
-    public static readonly SolidColorBrush SecondaryBrush = Brush(SecondaryText);
-    public static readonly SolidColorBrush WarningBrush = Brush(WarningText);
-    public static readonly SolidColorBrush HoverBrush = Brush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
-
-    /// <summary>
-    /// The interface font.
-    /// </summary>
-    /// <remarks>
-    /// The CJK faces are listed explicitly rather than left to WPF's font fallback.
-    /// Fallback does work, but it is resolved per text run and only when the first
-    /// family reports the glyph missing, which is one more thing that can differ
-    /// between a TextBlock and text drawn straight into a <c>FormattedText</c> — and
-    /// this app does both. Naming them makes Chinese render the same way everywhere.
-    /// </remarks>
-    public static FontFamily Font { get; } =
-        new("Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI, Microsoft YaHei, SimSun");
-
-    /// <summary>
-    /// A rounded dark slab with a drop shadow, as <b>two layers</b>.
-    /// </summary>
-    /// <remarks>
-    /// The split is not decoration. A WPF <c>Effect</c> renders its element's
-    /// whole subtree into an intermediate surface first, and text drawn through
-    /// that surface loses ClearType — a 9-point figure comes out visibly soft, and
-    /// the first build of this rail shipped exactly that. Putting the shadow on a
-    /// background-only sibling and the content on top of it keeps the shadow and
-    /// gives the text back its subpixel rendering, because siblings are rendered
-    /// independently.
-    /// </remarks>
-    public static (Grid Root, Border Content) Card(CornerRadius radius, double padding)
-    {
-        var root = new Grid();
-
-        var background = new Border
-        {
-            CornerRadius = radius,
-            Background = SurfaceBrush,
-            Effect = new DropShadowEffect
-            {
-                Color = Colors.Black,
-                BlurRadius = 18,
-                ShadowDepth = 2,
-                Opacity = 0.5,
-                Direction = 270,
-            },
-        };
-
-        var content = new Border
-        {
-            CornerRadius = radius,
-            Background = SurfaceBrush,
-            BorderBrush = Brush(Stroke),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(padding),
-        };
-
-        root.Children.Add(background);
-        root.Children.Add(content);
-        return (root, content);
-    }
-
-    /// <summary>
-    /// The corner rounding for a slab docked to an edge.
-    /// </summary>
-    /// <remarks>
-    /// <b>The docked side is squared off.</b> Rounding all four corners and sitting
-    /// the slab flush against the screen leaves two small crescents of desktop
-    /// showing through at the corners, which reads as a floating panel that happens
-    /// to be near the edge rather than one attached to it. Squaring the side that
-    /// touches is what makes it look docked, and it is the whole visual difference.
-    /// </remarks>
-    public static CornerRadius DockedCorners(RailEdge? edge, double radius) => edge switch
-    {
-        // WPF order is top-left, top-right, bottom-right, bottom-left.
-        RailEdge.Right => new CornerRadius(radius, 0, 0, radius),
-        RailEdge.Left => new CornerRadius(0, radius, radius, 0),
-        RailEdge.Top => new CornerRadius(0, 0, radius, radius),
-        _ => new CornerRadius(radius),
-    };
-}
-
 /// <summary>
-/// One account's row on the rail: its ring, and the one figure that fits.
+/// One account's item on the rail: its ring, and the one figure that fits.
 /// </summary>
+/// <remarks>
+/// The arrangement depends on which way the rail runs, and the two are genuinely
+/// different layouts rather than one rotated:
+/// <list type="bullet">
+/// <item>
+/// <b>On a side edge</b> the ring sits at the top of the item and the figure below
+/// it, because there is no width to put the figure beside.
+/// </item>
+/// <item>
+/// <b>On the top edge</b> the figure sits <i>beside</i> the ring. Below would work,
+/// but it makes the strip 77 pixels thick to carry an 11-pixel line of text, and a
+/// strip across the top of the screen is read as a bar — the thick version reads as
+/// a panel that happens to be up there.
+/// </item>
+/// </list>
+/// The first version of this only ever set a <c>Height</c>, so on the top edge each
+/// item shrank to the width of its ring and the items touched: nothing was wrong
+/// with the spacing value, there simply was not one.
+/// </remarks>
 internal sealed class RailRow : Grid
 {
     private readonly RingControl _ring;
     private readonly TextBlock _figure;
     private readonly Border _hit;
+    private bool _horizontal;
 
     public MonitoredAccount Account { get; }
 
@@ -131,20 +44,17 @@ internal sealed class RailRow : Grid
 
     public event Action<RailRow>? PointerLeft;
 
-    public RailRow(MonitoredAccount account, AccountState state)
+    public RailRow(MonitoredAccount account, AccountState state, bool horizontal)
     {
         Account = account;
         State = state;
 
-        Height = Theme.RingSize + Theme.RingSpacing + 11;
         Background = Brushes.Transparent;
 
         _ring = new RingControl
         {
             Width = Theme.RingSize,
             Height = Theme.RingSize,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Top,
             Icon = ProviderIcons.For(account.Key.Provider),
             Glyph = account.Key.Provider.Glyph(),
         };
@@ -153,17 +63,12 @@ internal sealed class RailRow : Grid
         {
             FontFamily = Theme.Font,
             FontSize = 10,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(0, 0, 0, 1),
-            Foreground = Theme.PrimaryBrush,
         };
 
-        // An attached property, so it cannot go in the initialiser above. Display
-        // mode snaps stems to whole pixels, which is what makes a three-character
-        // figure legible at this size; the ring's glyph wants the opposite and asks
-        // for Ideal by drawing through FormattedText instead.
+        // An attached property, so it cannot go in an initialiser. Display mode snaps
+        // stems to whole pixels, which is what makes a three-character figure legible
+        // at this size; the ring's mark wants the opposite and asks for Ideal by
+        // drawing through FormattedText instead.
         TextOptions.SetTextFormattingMode(_figure, TextFormattingMode.Display);
         TextOptions.SetTextRenderingMode(_figure, TextRenderingMode.ClearType);
 
@@ -173,10 +78,6 @@ internal sealed class RailRow : Grid
             Margin = new Thickness(2, 1, 2, 1),
             Background = Brushes.Transparent,
         };
-
-        Children.Add(_hit);
-        Children.Add(_ring);
-        Children.Add(_figure);
 
         MouseEnter += (_, _) =>
         {
@@ -189,7 +90,74 @@ internal sealed class RailRow : Grid
             PointerLeft?.Invoke(this);
         };
 
+        Arrange(horizontal);
         Update(state);
+    }
+
+    /// <summary>Lays the item out for the direction the rail is running.</summary>
+    public void SetOrientation(bool horizontal) => Arrange(horizontal);
+
+    private void Arrange(bool horizontal)
+    {
+        if (_horizontal == horizontal && Children.Count > 0) return;
+        _horizontal = horizontal;
+
+        Children.Clear();
+        ColumnDefinitions.Clear();
+
+        if (horizontal)
+        {
+            ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(7) });
+            // A fixed column, so the figures line up down the strip instead of each
+            // item being as wide as its own text and the row edges wandering.
+            ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(Theme.WideFigureWidth) });
+
+            Height = Theme.HorizontalThickness - 2;
+            Width = double.NaN;
+            Margin = new Thickness(0, 0, Theme.RowGap, 0);
+
+            _ring.HorizontalAlignment = HorizontalAlignment.Center;
+            _ring.VerticalAlignment = VerticalAlignment.Center;
+
+            _figure.HorizontalAlignment = HorizontalAlignment.Left;
+            _figure.VerticalAlignment = VerticalAlignment.Center;
+            _figure.TextAlignment = TextAlignment.Left;
+
+            Grid.SetColumnSpan(_hit, 3);
+            Grid.SetColumn(_hit, 0);
+            Grid.SetColumn(_ring, 0);
+            Grid.SetColumn(_figure, 2);
+        }
+        else
+        {
+            Height = Theme.RingSize + Theme.RingSpacing + 11;
+            Width = double.NaN;
+            Margin = new Thickness(0);
+
+            _ring.HorizontalAlignment = HorizontalAlignment.Center;
+            _ring.VerticalAlignment = VerticalAlignment.Top;
+
+            _figure.HorizontalAlignment = HorizontalAlignment.Center;
+            _figure.VerticalAlignment = VerticalAlignment.Bottom;
+            _figure.TextAlignment = TextAlignment.Center;
+            _figure.Margin = new Thickness(0, 0, 0, 1);
+
+            Grid.SetColumn(_hit, 0);
+            Grid.SetColumn(_ring, 0);
+            Grid.SetColumn(_figure, 0);
+        }
+
+        Children.Add(_hit);
+        Children.Add(_ring);
+        Children.Add(_figure);
+    }
+
+    /// <summary>Re-reads the palette. The ring draws in <c>OnRender</c>, so it only needs invalidating.</summary>
+    public void ApplyTheme()
+    {
+        _ring.InvalidateVisual();
+        Update(State);
     }
 
     public void Update(AccountState state)
@@ -209,6 +177,8 @@ internal sealed class RailRow : Grid
             _ring.UsedFraction = 0;
             _ring.ElapsedFraction = double.NaN;
             _ring.IsExhausted = false;
+
+            // Short, because on a horizontal rail this column is 46 pixels wide.
             _figure.Text = state.LastFailure is null ? "—" : "!";
             _figure.Foreground = state.LastFailure is null ? Theme.SecondaryBrush : Theme.WarningBrush;
             ToolTip = state.LastFailure?.Message();
@@ -224,8 +194,8 @@ internal sealed class RailRow : Grid
         _ring.ShowsRemaining = showsRemaining;
 
         // Money where there is no percentage. This is the DeepSeek case: a reading
-        // with a balance and no allowance has no fraction to show, and inventing
-        // one is the single thing this app must not do.
+        // with a balance and no allowance has no fraction to show, and inventing one
+        // is the single thing this app must not do.
         var figure = fullest is null
             ? reading.RailMoney ?? "—"
             : fullest.PercentText(showsRemaining);
@@ -236,5 +206,7 @@ internal sealed class RailRow : Grid
             : fullest?.IsExhausted == true
                 ? Theme.WarningBrush
                 : Theme.PrimaryBrush;
+
+        ToolTip = null;
     }
 }
