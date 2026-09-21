@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using PulseWin.Core;
 using PulseWin.Services;
+using PulseWin.Storage;
 
 namespace PulseWin.Ui;
 
@@ -185,16 +186,19 @@ internal sealed class RailRow : Grid
         }
 
         var fullest = reading.Fullest;
+        var showsRemaining = AppSettings.Current.ShowsRemaining;
+
         _ring.UsedFraction = fullest?.UsedFraction ?? 0;
         _ring.IsExhausted = fullest?.IsExhausted ?? false;
         _ring.ElapsedFraction = fullest?.ElapsedFraction(now) ?? double.NaN;
+        _ring.ShowsRemaining = showsRemaining;
 
         // Money where there is no percentage. This is the DeepSeek case: a reading
         // with a balance and no allowance has no fraction to show, and inventing
         // one is the single thing this app must not do.
         var figure = fullest is null
             ? reading.RailMoney ?? "—"
-            : RingControl.PercentText(fullest.UsedFraction);
+            : fullest.PercentText(showsRemaining);
 
         _figure.Text = figure;
         _figure.Foreground = !live

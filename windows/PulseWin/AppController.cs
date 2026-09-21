@@ -192,11 +192,12 @@ public sealed class AppController
             var reading = state.Reading;
             if (reading is null) continue;
 
-            var figure = reading.HeadlineFraction is { } fraction
-                ? RingControl.PercentText(fraction)
+            var figure = reading.Fullest is not null
+                ? reading.HeadlineText(AppSettings.Current.ShowsRemaining)
                 : reading.RailMoney ?? "—";
 
-            parts.Add($"{account.DisplayLabel}: {figure}");
+            var direction = AppSettings.Current.ShowsRemaining ? "left" : "used";
+            parts.Add($"{account.DisplayLabel}: {figure} {direction}");
         }
 
         _tray.SetTooltip(parts.Count == 0 ? "PulseWin" : "PulseWin · " + string.Join(" · ", parts));

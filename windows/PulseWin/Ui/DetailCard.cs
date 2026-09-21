@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using PulseWin.Core;
 using PulseWin.Services;
+using PulseWin.Storage;
 
 namespace PulseWin.Ui;
 
@@ -68,8 +69,24 @@ internal sealed class DetailCard : Popup
         if (reading is not null && reading.Windows.Count > 0)
         {
             _body.Children.Add(Divider());
+
+            // The rail carries a bare figure, and a bare figure is ambiguous — a
+            // small number under a nearly empty ring reads as "almost nothing
+            // left" whichever way it was counted. The card is where the word goes.
+            var showsRemaining = AppSettings.Current.ShowsRemaining;
+            _body.Children.Add(new TextBlock
+            {
+                Text = showsRemaining
+                    ? "Counting down — what is left"
+                    : "Counting up — what is used",
+                FontFamily = Theme.Font,
+                FontSize = 10.5,
+                Margin = new Thickness(0, 0, 0, 2),
+                Foreground = Theme.SecondaryBrush,
+            });
+
             foreach (var window in reading.Windows)
-                _body.Children.Add(WindowRow(window));
+                _body.Children.Add(WindowRow(window, showsRemaining));
         }
         else if (reading is not null)
         {
@@ -136,7 +153,7 @@ internal sealed class DetailCard : Popup
 
     public void Hide() => IsOpen = false;
 
-    private static UIElement WindowRow(UsageWindow window)
+    private static UIElement WindowRow(UsageWindow window, bool showsRemaining)
     {
         var now = DateTimeOffset.Now;
         var grid = new Grid { Margin = new Thickness(0, 5, 0, 5) };
@@ -166,12 +183,13 @@ internal sealed class DetailCard : Popup
 
         // The window clock, shown only where the provider stated a length to divide
         // by. A sort key is not a length, and dividing by one draws a fraction
-        // nobody reported.
+        // nobody reported. It is always "elapsed", never "left", because the clock
+        // runs one way whichever way the figure does.
         if (window.ElapsedFraction(now) is { } elapsed)
         {
             left.Children.Add(new TextBlock
             {
-                Text = $"{elapsed * 100:0}% of the window elapsed",
+                Text = $"{UsageWindow.Figure(elapsed)}% of the window elapsed",
                 FontFamily = Theme.Font,
                 FontSize = 10,
                 Foreground = Theme.SecondaryBrush,
@@ -184,13 +202,16 @@ internal sealed class DetailCard : Popup
         var right = new StackPanel { HorizontalAlignment = HorizontalAlignment.Right };
         right.Children.Add(new TextBlock
         {
-            Text = RingControl.PercentText(window.UsedFraction),
+            // **The word, not just the number.** This is the line that makes the
+            // figure unambiguous, and upstream puts it in exactly this place for
+            // exactly this reason.
+            Text = showsRemaining
+                ? $"{window.PercentText(remaining: true)} Left"
+                : $"{window.PercentText()} Used",
             FontFamily = Theme.Font,
-            FontSize = 13,
+            FontSize = 12.5,
             FontWeight = FontWeights.SemiBold,
             HorizontalAlignment = HorizontalAlignment.Right,
-            // **Not clamped to 100 for display.** A spend limit can run past it,
-            // and the provider's own number is the one worth showing.
             Foreground = window.IsExhausted ? Theme.WarningBrush : Theme.PrimaryBrush,
         });
 

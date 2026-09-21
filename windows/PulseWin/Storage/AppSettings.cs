@@ -61,6 +61,26 @@ public sealed class AppSettings
     public int RefreshMinutes { get; set; } = 5;
 
     /// <summary>
+    /// Whether the figure and the ring count down — what is left — instead of up.
+    ///
+    /// <para>
+    /// Upstream defaults this to <b>off</b>, meaning it counts up, and its hovert
+    /// card carries the "Used"/"Left" word that removes the ambiguity. This port
+    /// defaults it to <b>on</b>, and that is a deliberate departure: a bare
+    /// percentage under a nearly empty ring reads as "almost nothing left" no
+    /// matter which way it was counted, which is the single most likely thing to
+    /// be misread on the rail. Counting down makes the picture a fuel gauge — a
+    /// full ring means a full tank — and a full ring cannot be misread.
+    /// </para>
+    /// <para>
+    /// The colour still comes off what is <i>gone</i> either way, so a sliver of
+    /// quota left is a small red arc rather than a large one. How close a limit is
+    /// does not change because the figure beside it was counted from the other end.
+    /// </para>
+    /// </summary>
+    public bool ShowsRemaining { get; set; } = true;
+
+    /// <summary>
     /// Whether the rail is dimmed to a thin sliver when nothing needs attention.
     /// Pulse calls it auto-collapse.
     /// </summary>

@@ -184,6 +184,65 @@ public sealed class UsageWindow
         IsExhausted = true,
     };
 
+    /// <summary>
+    /// The same reading counted from the other end, for when the reader has asked
+    /// to see what is <b>left</b>.
+    /// </summary>
+    public double RemainingFraction => Math.Clamp(1 - UsedFraction, 0, 1);
+
+    /// <summary>
+    /// This window's figure as a percentage string.
+    /// </summary>
+    /// <param name="remaining">
+    /// True counts down — what is left — and false counts up, which is what the
+    /// providers report.
+    /// </param>
+    public string PercentText(bool remaining = false) =>
+        $"{Figure(remaining ? RemainingFraction : UsedFraction)}%";
+
+    /// <summary>
+    /// A fraction as a whole percentage that never rounds away the fact that there
+    /// is <i>some</i>, or that there is <i>not all</i>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Both ends get the rule, not just one.</b> Subtracting the used figure
+    /// from 100 looks tidier and is wrong at the extremes: a window 99.6% spent
+    /// would read "0% left" while there is still something there, and a window
+    /// 0.4% spent would read "100% left" when it is not. So the figure shown is the
+    /// one being displayed, held off both ends: nothing left reads 0%, anything
+    /// left reads at least 1%, nothing used reads 100%, and anything used reads at
+    /// most 99%. The two views need not sum to 100 — only one is ever on screen.
+    /// </para>
+    /// <para>
+    /// This is also why the mark and the figure agree: the arc is drawn with a
+    /// round cap, so the smallest non-zero reading still puts a dot of colour on
+    /// screen, and "0%" beside that dot is the same number disagreeing with itself.
+    /// Cursor reports 0.03% and its own page says 1%.
+    /// </para>
+    /// </remarks>
+    public static int Figure(double fraction)
+    {
+        // **Non-finite first, because `Math.Clamp` propagates NaN rather than
+        // catching it** and the cast to int would then be undefined. A budget of
+        // "inf" typed into Settings arrives here as (inf − balance)/inf, and
+        // upstream crashed on every launch until the field was cleared, because
+        // the figure had been persisted. It is guarded at the source too; this is
+        // the one that cannot be bypassed.
+        if (!double.IsFinite(fraction)) return 0;
+
+        var percent = Math.Clamp(fraction, 0, 1) * 100;
+        if (percent <= 0) return 0;
+        if (percent >= 100) return 100;
+
+        // Away from zero, which is what Swift's `rounded()` does — .NET's default
+        // is banker's rounding and would take 0.5 down to 0.
+        return (int)Math.Clamp(Math.Round(percent, MidpointRounding.AwayFromZero), 1, 99);
+    }
+
+    /// <summary>The same rule for a bare fraction that belongs to no window.</summary>
+    public static string PercentTextOf(double fraction) => $"{Figure(fraction)}%";
+
     public string Name
     {
         get

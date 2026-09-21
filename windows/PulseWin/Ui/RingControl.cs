@@ -26,6 +26,22 @@ public sealed class RingControl : FrameworkElement
     /// <summary>0...1 gone. A provider may report past 1 once a limit is exceeded.</summary>
     public double UsedFraction { get; set; }
 
+    /// <summary>
+    /// Whether the arc counts down — what is left — instead of up.
+    /// </summary>
+    /// <remarks>
+    /// <b>The colour is not flipped with it.</b> How close a limit is does not
+    /// change because the figure beside it was counted from the other end, so a
+    /// ring with a sliver left is a small red arc rather than a large one. Inverting
+    /// both would paint an almost-spent account a reassuring green.
+    /// <para>
+    /// An exhausted window is always a full ring, whichever way it is counted:
+    /// there is nothing left to show the size of, and "spent" is the one reading
+    /// that has to be unmistakable at a glance.
+    /// </para>
+    /// </remarks>
+    public bool ShowsRemaining { get; set; }
+
     /// <summary>The provider's own verdict. Wins over the ramp when set.</summary>
     public bool IsExhausted { get; set; }
 
@@ -87,8 +103,14 @@ public sealed class RingControl : FrameworkElement
 
         // The reading. Clamped for geometry only; the number shown elsewhere keeps
         // whatever the provider said, so a spend limit at 130% still displays 130%.
-        var fraction = Math.Clamp(UsedFraction, 0, 1);
-        if (fraction > 0)
+        var used = Math.Clamp(UsedFraction, 0, 1);
+
+        // A spent window is a full ring whichever way the figure runs.
+        var arc = IsExhausted || used >= 1
+            ? 1
+            : ShowsRemaining ? 1 - used : used;
+
+        if (arc > 0)
         {
             var colour = IsExhausted ? ExhaustedColour : Ramp(UsedFraction);
             var pen = new Pen(new SolidColorBrush(HasReading ? colour : Dim(colour)), RingThickness)
@@ -100,10 +122,10 @@ public sealed class RingControl : FrameworkElement
 
             // A full ring drawn as a 360-degree arc degenerates into a point and
             // vanishes. At (or past) the limit, a plain circle is what is wanted.
-            if (fraction >= 0.9999)
+            if (arc >= 0.9999)
                 dc.DrawEllipse(null, pen, centre, radius, radius);
             else
-                dc.DrawGeometry(null, pen, Arc(centre, radius, 0, fraction * 360));
+                dc.DrawGeometry(null, pen, Arc(centre, radius, 0, arc * 360));
         }
 
         DrawGlyph(dc, centre);
@@ -220,22 +242,6 @@ public sealed class RingControl : FrameworkElement
 
     private static Color Dim(Color colour) => Color.FromRgb(
         (byte)(colour.R * 0.45), (byte)(colour.G * 0.45), (byte)(colour.B * 0.45));
-
-    /// <summary>
-    /// Rounded to a whole number, <b>except that anything used at all never reads
-    /// as 0%</b>.
-    /// </summary>
-    /// <remarks>
-    /// Ported from Pulse's `percentText`. A ring that is visibly not empty beside
-    /// the text "0%" reads as a bug, and "0%" is the one rounding that turns a
-    /// real reading into a false one.
-    /// </remarks>
-    public static string PercentText(double fraction)
-    {
-        var percent = fraction * 100;
-        if (percent > 0 && percent < 1) return "1%";
-        return $"{Math.Round(percent, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture)}%";
-    }
 
     /// <summary>How long until the window turns over, in the compact form the rail uses.</summary>
     public static string CountdownText(DateTimeOffset? resetsAt, DateTimeOffset now)

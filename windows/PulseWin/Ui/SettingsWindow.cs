@@ -395,8 +395,43 @@ internal sealed class SettingsWindow : Window
         Grid.SetColumn(_offset, 5);
         row.Children.Add(_offset);
 
-        block.Child = row;
+        var stack = new StackPanel();
+        stack.Children.Add(row);
+
+        // The figure's direction. Upstream calls this "Counts down instead of up,
+        // figure and ring together", and it is the setting that removes the one
+        // ambiguity a bare percentage cannot: a small number under a nearly empty
+        // ring reads as "almost nothing left" whichever way it was counted.
+        var countdown = new CheckBox
+        {
+            Content = "Count down instead of up — show what is left, figure and ring together",
+            IsChecked = AppSettings.Current.ShowsRemaining,
+            FontSize = 12,
+            Margin = new Thickness(0, 12, 0, 0),
+            Foreground = Theme.PrimaryBrush,
+        };
+        countdown.Checked += (_, _) => SetShowsRemaining(true);
+        countdown.Unchecked += (_, _) => SetShowsRemaining(false);
+        stack.Children.Add(countdown);
+
+        stack.Children.Add(new TextBlock
+        {
+            Text = "The colour always follows what is gone, so a sliver of quota left stays a small red arc.",
+            FontSize = 11,
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(24, 3, 0, 0),
+            Foreground = Theme.SecondaryBrush,
+        });
+
+        block.Child = stack;
         return block;
+    }
+
+    private void SetShowsRemaining(bool value)
+    {
+        AppSettings.Current.ShowsRemaining = value;
+        AppSettings.Current.Save();
+        SettingsChanged?.Invoke();
     }
 
     private static void StyleField(TextBox field)
@@ -487,13 +522,15 @@ internal sealed class SettingsWindow : Window
 
             if (state?.Reading is { } reading)
             {
-                var figure = reading.HeadlineFraction is { } fraction
-                    ? RingControl.PercentText(fraction)
+                var figure = reading.Fullest is not null
+                    ? reading.HeadlineText(settings.ShowsRemaining)
                     : reading.RailMoney ?? "read";
 
+                var direction = settings.ShowsRemaining ? "left" : "used";
+
                 text.Text = state.LastFailure is null
-                    ? $"{figure} used"
-                    : $"{figure} (stale)";
+                    ? $"{figure} {direction}"
+                    : $"{figure} {direction} (stale)";
                 text.Foreground = state.LastFailure is null ? Theme.PrimaryBrush : Theme.WarningBrush;
             }
             else if (state?.LastFailure is { } failure)

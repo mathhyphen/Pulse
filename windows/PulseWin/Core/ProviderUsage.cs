@@ -132,6 +132,17 @@ public sealed class ProviderUsage
     /// </summary>
     public double? HeadlineFraction => Fullest?.UsedFraction;
 
+    /// <summary>
+    /// The figure for the rail, counted the way the reader asked for.
+    /// </summary>
+    /// <param name="remaining">
+    /// True counts down — what is left. Kept as a parameter rather than read from
+    /// settings here, so that the store stays free of the interface's choices and
+    /// the two callers that draw a figure cannot disagree about which way it runs.
+    /// </param>
+    public string HeadlineText(bool remaining) =>
+        Fullest is { } window ? window.PercentText(remaining) : "";
+
     /// <summary>Short text for the rail when there is no percentage: money, truncated rather than rounded.</summary>
     public string? RailMoney => CreditRemaining is { } credit
         ? MoneyFormat.RailText(credit.Amount, credit.Currency)

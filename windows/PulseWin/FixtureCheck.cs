@@ -342,6 +342,44 @@ public static class FixtureCheck
                 CodexService.PlanName("prolite") == "Pro 5x");
         }
 
+        log.AppendLine("Figures — the rule that holds both ends off the extremes");
+        {
+            // Nothing used reads 100%, anything used reads at most 99%. Nothing
+            // left reads 0%, anything left reads at least 1%. The two views need
+            // not sum to 100, because only one is ever on screen.
+            Check("nothing used reads 100% left", UsageWindow.Figure(1.0) == 100, $"got {UsageWindow.Figure(1.0)}");
+            Check("everything used reads 0% left", UsageWindow.Figure(0.0) == 0, $"got {UsageWindow.Figure(0.0)}");
+
+            // The two that a subtraction would get wrong.
+            Check("a window 0.4% spent does not read 100% left",
+                UsageWindow.PercentTextOf(1 - 0.004) == "99%", $"got {UsageWindow.PercentTextOf(1 - 0.004)}");
+            Check("a window 99.6% spent does not read 0% left",
+                UsageWindow.PercentTextOf(1 - 0.996) == "1%", $"got {UsageWindow.PercentTextOf(1 - 0.996)}");
+
+            Check("the smallest real reading never rounds to 0%",
+                UsageWindow.Figure(0.0003) == 1, $"got {UsageWindow.Figure(0.0003)}");
+
+            // A budget of "inf" typed into Settings arrives as (inf - balance)/inf.
+            // Casting NaN to int is undefined; upstream crashed on every launch
+            // until the field was cleared, because the figure had been persisted.
+            Check("a non-finite fraction reads 0% rather than trapping",
+                UsageWindow.Figure(double.NaN) == 0
+                && UsageWindow.Figure(double.PositiveInfinity) == 0
+                && UsageWindow.Figure(double.NegativeInfinity) == 0);
+
+            Check("fractions outside 0..1 are clamped rather than shown",
+                UsageWindow.Figure(1.3) == 100 && UsageWindow.Figure(-0.2) == 0);
+
+            // 3% used is 97% left, and the pair must read the way round it was asked.
+            var window = new UsageWindow
+            {
+                Id = "t", Kind = WindowKind.Weekly, UsedFraction = 0.03,
+            };
+            Check("3% used reads 3% counting up and 97% counting down",
+                window.PercentText() == "3%" && window.PercentText(remaining: true) == "97%",
+                $"{window.PercentText()} / {window.PercentText(remaining: true)}");
+        }
+
         log.AppendLine();
         log.AppendLine($"  {passed} passed, {failed} failed");
 

@@ -75,9 +75,16 @@ balance this app has watched, nothing at all, or a figure the reader typed. The
 "since top-up" mode is *measured, not inferred* — a balance that rises can only be
 a top-up.
 
+**A figure never rounds away the fact that there is *some*, or that there is *not
+all*.** Both ends are held off the extremes: nothing left reads 0%, anything left
+reads at least 1%, nothing used reads 100%, and anything used reads at most 99%. The
+two views need not sum to 100, because only one is ever on screen. A non-finite
+fraction reads 0% rather than trapping — upstream crashed on every launch until an
+`inf` budget was cleared from Settings, because the figure had been persisted.
+
 ## Parser verification
 
-`PulseWin.exe --fixtures` runs **42 assertions** against captured service replies
+`PulseWin.exe --fixtures` runs **50 assertions** against captured service replies
 and needs no network, no key and no account. The Zhipu and DeepSeek bodies are the
 ones upstream captured from the live services and committed to its own test
 fixtures, so they are real traffic; the Codex bodies are **constructed** from the
@@ -86,7 +93,7 @@ that this port reads that shape consistently, not that the shape is what the liv
 endpoint still sends. That limitation is labelled in the source too.
 
 ```
-42 passed, 0 failed
+50 passed, 0 failed
 ```
 
 `PulseWin.exe --selftest` adds credential discovery, a live fetch of every
@@ -122,6 +129,23 @@ put one subscription's figures under another's ring.
   Sparkle updater, and the browser-session providers.
 
 ## Differences that are Windows-specific, and why
+
+**The rail counts down by default.** This is the one place this port deliberately
+disagrees with upstream, and it is worth stating plainly. Upstream's
+`showsRemaining` defaults to `false`, so its ring and figure count *up* — what is
+gone — and the word that removes the ambiguity ("88% Used" / "12% Left") lives in
+the hover card. That is fine on a card, but the rail carries a bare percentage, and
+a small number under a nearly empty ring reads as "almost nothing left" whichever
+way it was counted. Counting down makes the picture a fuel gauge: a full ring means
+a full tank, and a full ring cannot be misread.
+
+The **colour still comes off what is gone** in both modes, which is upstream's rule
+and the right one — how close a limit is does not change because the figure beside
+it was counted from the other end, so a sliver of quota left stays a small red arc
+rather than a large green one. An exhausted window is a full ring either way.
+
+Settings carries the toggle, and the hover card now names the direction as well as
+carrying upstream's `Used` / `Left` suffix on every row.
 
 **Credential storage is DPAPI**, not a hand-rolled encrypted file. CryptoKit plus
 owner-only permissions is the right answer on macOS; on Windows,
