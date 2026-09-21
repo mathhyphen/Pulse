@@ -166,6 +166,37 @@ monitor.
 taskbar but not out of Alt-Tab, and an always-on-top strip in the window switcher
 is a window, not a monitor.
 
+## The provider marks
+
+Each ring carries the product's own mark, taken from the fork's
+`Sources/Pulse/Resources` — the same [Lobe Icons](https://github.com/lobehub/lobe-icons)
+files upstream bundles, copied byte-for-byte and parsed straight into WPF geometry
+at run time. `Icons/README.md` records the provenance; the MIT notice is already in
+the repository's `THIRD_PARTY_NOTICES.md`.
+
+**They are monochrome templates and are drawn as such.** Every file is
+`fill="currentColor"` on a `viewBox="0 0 24 24"` grid, which is what that attribute
+means: the mark has no colour of its own and takes the foreground it is given. That
+is upstream's rule and it is the right one — on this surface **colour means usage**,
+so the only coloured thing on a ring is the arc. A brand tint would put two meanings
+on one surface and make a green mark beside a green arc say nothing.
+
+Two details that took checking rather than guessing:
+
+- **The path data goes straight through.** The two path mini-languages are close
+  enough that this is a parse, not a conversion, so there is no SVG library and no
+  build-time conversion step — the files stay the files. The risk was the packed arc
+  flags SVG allows (`a5.526 5.526 0 01-…`, where `01` is *largeArc=0, sweep=1* with
+  no separator); `--selftest` now reports every mark's parse status and bounds, and
+  all five go through unchanged.
+- **Scaled from the 24×24 grid, not fitted to the ink.** The bounds differ — 16×20
+  for OpenCode, 24×23.8 for OpenAI — because they are drawn that way on purpose,
+  each sized to its own optical weight. Fitting every mark to the same box would
+  flatten exactly the difference the designers put there.
+
+The letters survive only as the fallback for a mark that will not parse, which is a
+missing mark rather than a failure: the ring still carries the figure.
+
 ## Localisation
 
 English and Simplified Chinese, chosen at the top of Settings. The default is
@@ -257,7 +288,9 @@ Providers/     One service per route — the ported part
 Storage/       DPAPI credential store, settings, the DeepSeek baseline
 Services/      UsageStore: the refresh loop and the state behind the rail
 Ui/            RailWindow, RailRow, RingControl, DetailCard, SettingsWindow, TrayIcon
+Ui/ProviderIcons  The provider marks, parsed from SVG into WPF geometry
 Localization/  Strings, with one implementation per language
+Icons/         The five SVG marks, copied from Sources/Pulse/Resources
 FixtureCheck   The 50 assertions against captured replies
 SelfTest       Credential discovery, a live fetch of every provider, the CJK check
 ```

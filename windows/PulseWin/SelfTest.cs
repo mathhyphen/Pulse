@@ -120,6 +120,7 @@ public static class SelfTest
 
         report.AppendLine();
         DescribeLocalisation(report);
+        DescribeIcons(report);
 
         report.AppendLine();
         report.AppendLine(new string('-', 78));
@@ -149,6 +150,21 @@ public static class SelfTest
         }
 
         return 0;
+    }
+
+    private static void DescribeIcons(StringBuilder report)
+    {
+        report.AppendLine(new string('-', 78));
+        report.AppendLine("PROVIDER MARKS (SVG path data parsed straight into WPF geometry)");
+        report.AppendLine();
+
+        foreach (var provider in ProviderCatalog.All)
+        {
+            var (ok, detail) = ProviderIcons.Diagnose(provider);
+            report.AppendLine($"  {(ok ? "OK  " : "FAIL")}  {provider.DisplayName(),-16} {detail}");
+        }
+
+        report.AppendLine();
     }
 
     private static Task<ProviderUsage> Fetch(MonitoredAccount account) =>

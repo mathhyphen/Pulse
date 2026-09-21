@@ -56,16 +56,11 @@ public static class ProviderCatalog
         _ => provider.ToString(),
     };
 
-    /// <summary>The ring's accent, used when the service has not said it is spent.</summary>
-    public static string AccentHex(this Provider provider) => provider switch
-    {
-        Provider.Codex => "#10A37F",
-        Provider.OpenCodeGo => "#6E56CF",
-        Provider.Zhipu => "#3B6EF6",
-        Provider.Zai => "#3B6EF6",
-        Provider.DeepSeek => "#4D6BFE",
-        _ => "#8A8A8E",
-    };
+    // A per-provider accent colour used to live here, tinting the letter drawn in
+    // the ring. It is gone with the letters: the rings now carry each product's own
+    // mark, which is a monochrome template, and upstream's rule is that colour on
+    // this surface means usage. A brand tint beside a brand-tinted arc would mean
+    // nothing.
 
     /// <summary>
     /// The identifier Pulse uses for this provider, kept identical so that window
@@ -88,12 +83,10 @@ public static class ProviderCatalog
     /// The mark drawn inside the ring.
     /// </summary>
     /// <remarks>
-    /// Pulse puts each product's own brand glyph in the centre of its ring, which
-    /// is what makes a rail of five rings readable at a glance. Those marks are
-    /// upstream's bundled assets and are not redistributed here, so a monogram
-    /// stands in for them. It is doing real work rather than decorating: a ring at
-    /// 3% is a hairline arc, and without something in the middle it reads as an
-    /// empty circle that failed to draw.
+    /// The real brand marks are bundled as SVG — see <c>Ui/ProviderIcons</c> — and
+    /// these letters are only the fallback for a mark that will not parse. They are
+    /// doing real work otherwise: a ring at 3% is a hairline arc, and without
+    /// something in the middle it reads as an empty circle that failed to draw.
     ///
     /// Case distinguishes the two storefronts — <c>Z</c> is the mainland plan and
     /// <c>z</c> the international one — because they are separate accounts whose

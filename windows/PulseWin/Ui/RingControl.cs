@@ -51,15 +51,20 @@ public sealed class RingControl : FrameworkElement
     /// <summary>How far through the window, 0...1, for the outer arc. NaN draws none.</summary>
     public double ElapsedFraction { get; set; } = double.NaN;
 
-    public Color Accent { get; set; } = Color.FromRgb(0x8A, 0x8A, 0x8E);
-
     /// <summary>
-    /// The mark drawn in the middle of the ring.
-    ///
-    /// A rail of rings with nothing in them cannot be read: at a low value the arc
-    /// is a hairline, and an empty circle is indistinguishable from one that failed
-    /// to draw. The mark is what says which account a ring belongs to.
+    /// The provider's mark, in its own 24×24 coordinate space.
     /// </summary>
+    /// <remarks>
+    /// <b>Drawn as a monochrome template, not in brand colours.</b> Every mark is
+    /// <c>fill="currentColor"</c>, which is what that attribute means: it has no
+    /// colour of its own and takes the foreground it is given. That is the point
+    /// rather than a limitation — colour on this surface means <i>usage</i>, so a
+    /// brand tint would put two meanings on one ring and make a green mark beside a
+    /// green arc say nothing.
+    /// </remarks>
+    public Geometry? Icon { get; set; }
+
+    /// <summary>The letter to fall back to when <see cref="Icon"/> could not be read.</summary>
     public string Glyph { get; set; } = "";
 
     public double RingThickness { get; set; } = 3.5;
@@ -128,20 +133,52 @@ public sealed class RingControl : FrameworkElement
                 dc.DrawGeometry(null, pen, Arc(centre, radius, 0, arc * 360));
         }
 
-        DrawGlyph(dc, centre);
+        DrawMark(dc, centre, size);
     }
 
     /// <summary>
     /// The provider's mark, centred.
     /// </summary>
     /// <remarks>
-    /// Drawn after the arc, and in the accent colour rather than the ring's value
-    /// colour: the arc is the reading and should be the thing that changes, while
-    /// the mark is the identity and should not. The two are deliberately different
-    /// colours so a mostly-empty ring still says which account it is.
+    /// Drawn after the arc, and in the primary foreground rather than the ring's
+    /// value colour: the arc is the reading and should be the thing that changes,
+    /// while the mark is the identity and should not. The two are deliberately
+    /// different so a mostly-empty ring still says which account it is.
+    /// <para>
+    /// Scaled from the mark's own 24×24 grid rather than fitted to its ink bounds.
+    /// The marks have different bounds — 16×20 for OpenCode, 24×23.8 for OpenAI —
+    /// because they are drawn that way on purpose, each sized to its own optical
+    /// weight. Fitting every one to the same box would flatten exactly the
+    /// difference the designers put there.
+    /// </para>
     /// </remarks>
-    private void DrawGlyph(DrawingContext dc, Point centre)
+    private void DrawMark(DrawingContext dc, Point centre, double size)
     {
+        var box = size * 0.52;
+        var brush = new SolidColorBrush(Color.FromRgb(0xF2, 0xF2, 0xF7))
+        {
+            // Dimmed when there is no reading, the same signal the arc and the
+            // figure use for "this one has nothing to say".
+            Opacity = HasReading ? 0.92 : 0.34,
+        };
+        brush.Freeze();
+
+        if (Icon is { } icon)
+        {
+            var scale = box / ProviderIcons.ViewBox;
+
+            // Pushed translate-then-scale, which composes as Translate(Scale(shape)):
+            // the mark is scaled inside its own grid first, then placed.
+            dc.PushTransform(new TranslateTransform(centre.X - box / 2, centre.Y - box / 2));
+            dc.PushTransform(new ScaleTransform(scale, scale));
+            dc.DrawGeometry(brush, null, icon);
+            dc.Pop();
+            dc.Pop();
+            return;
+        }
+
+        // No mark: the ring still carries the figure, which is the part that
+        // matters, so this is a fallback rather than a failure.
         if (string.IsNullOrEmpty(Glyph)) return;
 
         var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
@@ -149,16 +186,9 @@ public sealed class RingControl : FrameworkElement
             new FontFamily("Segoe UI Variable Display, Segoe UI"),
             FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
 
-        var size = Math.Max(8, Math.Min(ActualWidth, ActualHeight) * 0.40);
-        var brush = new SolidColorBrush(Accent) { Opacity = HasReading ? 0.95 : 0.40 };
-        brush.Freeze();
-
-        // `TextFormattingMode.Ideal` keeps the glyph's shape at this size; the
-        // display mode would snap stems to whole pixels and muddy a letter that is
-        // only a dozen pixels tall.
         var text = new FormattedText(
             Glyph, System.Globalization.CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight, typeface, size, brush, dpi)
+            FlowDirection.LeftToRight, typeface, size * 0.40, brush, dpi)
         {
             TextAlignment = TextAlignment.Center,
         };

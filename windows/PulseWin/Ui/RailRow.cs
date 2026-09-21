@@ -126,7 +126,7 @@ internal sealed class RailRow : Grid
             Height = Theme.RingSize,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
-            Accent = AccentColour(account.Key.Provider),
+            Icon = ProviderIcons.For(account.Key.Provider),
             Glyph = account.Key.Provider.Glyph(),
         };
 
@@ -217,14 +217,5 @@ internal sealed class RailRow : Grid
             : fullest?.IsExhausted == true
                 ? Theme.WarningBrush
                 : Theme.PrimaryBrush;
-    }
-
-    private static Color AccentColour(Provider provider)
-    {
-        var hex = provider.AccentHex().TrimStart('#');
-        return Color.FromRgb(
-            Convert.ToByte(hex.Substring(0, 2), 16),
-            Convert.ToByte(hex.Substring(2, 2), 16),
-            Convert.ToByte(hex.Substring(4, 2), 16));
     }
 }
