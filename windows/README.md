@@ -228,6 +228,27 @@ undoes the flush position: the slab still reads as floating. Verified by samplin
 the corner pixel — `(29,29,31)` where a rounded corner would show the desktop's
 `(255,255,255)`.
 
+The drag measures the pointer in **physical screen pixels**, and that is not a
+detail. The obvious version — take `e.GetPosition(this)` at the press, take it again
+on each move, add the difference — is wrong, because the window is the thing being
+moved: step it right by one pixel and the pointer's window-relative x falls by one,
+which computes a position one pixel back. The two chase each other and the rail
+oscillates, which on screen reads as a flicker. `PointToScreen` adds the window's
+own offset back in and reports where the pointer actually is on the desk, which
+does not move when the window does (and differs from `Window.Left` by the DPI scale,
+so that conversion is done per move — a drag onto a monitor with a different scale
+changes it mid-drag).
+
+Two smaller things were fighting the drag as well: the hover card opened and closed
+under the pointer for the whole length of the move, because crossing rows raises
+`MouseEnter`; and the controller re-docks the rail whenever its size changes, which
+is right in general and yanks the rail back to its docked coordinates mid-drag.
+Both are now suppressed while `IsDragging` — the re-dock guard sits inside `Redock`
+rather than at each call site, so the next caller cannot forget it.
+
+Verified by injecting a real drag and reading the window rectangle after each step:
+ten 12-pixel moves, **zero drift**, with the grab offset preserved.
+
 ## The provider marks
 
 Each ring carries the product's own mark, taken from the fork's

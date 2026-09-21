@@ -30,8 +30,18 @@ internal sealed class RailWindow : Window
     private RailRow? _hovered;
 
     private bool _dragging;
-    private Point _dragOrigin;
-    private Point _dragWindowOrigin;
+    private Point _dragGrab;
+
+    /// <summary>
+    /// Whether a drag is in progress.
+    /// </summary>
+    /// <remarks>
+    /// Read by the controller, which re-docks the rail whenever its size changes.
+    /// That is right in general and wrong during a drag: the rail is being positioned
+    /// by hand, and having it yanked back to its docked coordinates every time a
+    /// measurement lands is the third thing that looked like flickering.
+    /// </remarks>
+    public bool IsDragging => _dragging;
 
     public event Action? SettingsRequested;
 
@@ -193,6 +203,10 @@ internal sealed class RailWindow : Window
 
     private void OnRowEntered(RailRow row)
     {
+        // No card while the rail is being moved: the pointer crosses rows on the way
+        // and the card would open and close the whole way across the screen.
+        if (_dragging) return;
+
         _hovered = row;
         _card.Show(row, row);
     }
@@ -251,8 +265,18 @@ internal sealed class RailWindow : Window
     }
 
     /// <summary>Puts the rail back where the settings say, docked or free.</summary>
+    /// <remarks>
+    /// Does nothing while a drag is in progress. The controller calls this whenever
+    /// the rail's size changes and whenever the work area does, which is right in
+    /// general and wrong here: the rail is being positioned by hand, and having it
+    /// pulled back to its docked coordinates the moment a measurement lands is a
+    /// visible fight. Guarded here rather than at each call site so the next caller
+    /// cannot forget.
+    /// </remarks>
     public void Redock()
     {
+        if (_dragging) return;
+
         var settings = AppSettings.Current;
 
         if (settings.RailFree)
@@ -295,16 +319,54 @@ internal sealed class RailWindow : Window
 
     // ------------------------------------------------------------------ dragging
 
+    /// <summary>
+    /// Where the pointer is, in physical screen pixels.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not <c>e.GetPosition(this)</c>.</b> That is measured against the window,
+    /// and the window is the thing being moved — so every step changes the frame of
+    /// reference. Move the window right by one pixel and the pointer's window-relative
+    /// x falls by one, which computes a position one pixel back: the two chase each
+    /// other and the rail oscillates. On screen that reads as a flicker, and it is
+    /// what the first version of this did.
+    /// <para>
+    /// <c>PointToScreen</c> adds the window's own offset back in, so it reports where
+    /// the pointer actually is on the desk — which does not move when the window does.
+    /// </para>
+    /// </remarks>
+    private Point PointerOnScreen(MouseEventArgs e) => PointToScreen(e.GetPosition(this));
+
+    /// <summary>
+    /// The window's DPI scale.
+    /// </summary>
+    /// <remarks>
+    /// Needed because the two coordinate spaces differ: <see cref="Window.Left"/> is
+    /// in device-independent units and <c>PointToScreen</c> answers in device pixels.
+    /// Read per move rather than once, because dragging onto a monitor with a
+    /// different scale changes it mid-drag.
+    /// </remarks>
+    private (double X, double Y) DpiScale()
+    {
+        var dpi = VisualTreeHelper.GetDpi(this);
+        return (dpi.DpiScaleX, dpi.DpiScaleY);
+    }
+
     private void OnRailMouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left) return;
 
-        // A drag must not also open a hover card, or the card follows the pointer
-        // across the screen while the rail is being moved.
+        // A drag must not also open a hover card, or the card opens and closes under
+        // the pointer for the whole length of the drag — the second thing that looked
+        // like flickering.
         _card.Hide();
 
-        _dragOrigin = e.GetPosition(this);
-        _dragWindowOrigin = new Point(Left, Top);
+        var pointer = PointerOnScreen(e);
+        var (scaleX, scaleY) = DpiScale();
+
+        // How far into the slab the pointer took hold, in physical pixels, held for
+        // the whole drag so the rail does not slide to centre itself under the cursor.
+        _dragGrab = new Point(pointer.X - Left * scaleX, pointer.Y - Top * scaleY);
+
         _dragging = true;
         CaptureMouse();
         e.Handled = true;
@@ -314,17 +376,18 @@ internal sealed class RailWindow : Window
     {
         if (!_dragging || e.LeftButton != MouseButtonState.Pressed) return;
 
-        var now = e.GetPosition(this);
-        Left = _dragWindowOrigin.X + (now.X - _dragOrigin.X);
-        Top = _dragWindowOrigin.Y + (now.Y - _dragOrigin.Y);
+        var pointer = PointerOnScreen(e);
+        var (scaleX, scaleY) = DpiScale();
+
+        Left = (pointer.X - _dragGrab.X) / scaleX;
+        Top = (pointer.Y - _dragGrab.Y) / scaleY;
     }
 
     private void OnRailMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (!_dragging) return;
 
-        _dragging = false;
-        ReleaseMouseCapture();
+        EndDrag();
         Settle();
     }
 
@@ -383,19 +446,28 @@ internal sealed class RailWindow : Window
     {
         // A double click is the reflex for "put it back".
         e.Handled = true;
-        _dragging = false;
-        ReleaseMouseCapture();
         ResetPosition();
     }
 
     /// <summary>Puts the rail back on the edge the settings name, centred on it.</summary>
     public void ResetPosition()
     {
+        // The one reposition a drag must not veto: this is the way home, and it is
+        // reached from the menu rather than from a stray event.
+        EndDrag();
+
         var settings = AppSettings.Current;
         settings.RailFree = false;
         settings.RailOffset = 0;
         settings.Save();
         Dock(settings.Edge, 0);
+    }
+
+    /// <summary>Ends a drag without settling, for the paths that reposition instead.</summary>
+    private void EndDrag()
+    {
+        _dragging = false;
+        if (IsMouseCaptured) ReleaseMouseCapture();
     }
 
     /// <summary>
