@@ -193,19 +193,44 @@ public static class Theme
     }
 
     /// <summary>
-    /// The rounded dark slab, as <b>two layers</b>.
+    /// The rounded slab.
     /// </summary>
     /// <remarks>
-    /// The split is not decoration. A WPF <c>Effect</c> renders its element's whole
-    /// subtree into an intermediate surface first, and text drawn through that
-    /// surface loses ClearType — a 9-point figure comes out visibly soft. Putting the
-    /// shadow on a background-only sibling and the content on top of it keeps the
-    /// shadow and gives the text back its subpixel rendering, because siblings are
-    /// rendered independently.
+    /// <para>
+    /// <b>Two layers when solid, one when translucent.</b> A WPF <c>Effect</c> renders
+    /// its element's whole subtree into an intermediate surface first, and text drawn
+    /// through that surface loses ClearType — a 9-point figure comes out visibly soft.
+    /// So the shadow lives on a background-only sibling and the content is drawn over
+    /// it, which keeps the shadow and gives the text back its subpixel rendering.
+    /// </para>
+    /// <para>
+    /// That sibling has to be a <i>filled</i> rounded rect, because an effect can only
+    /// cast a shadow from something. Which means it also contributes its own opacity —
+    /// and in the translucent case that is wrong twice over: the two layers stack, so
+    /// a surface meant to be 55% opaque comes out at 80%, and what shows through is
+    /// the layer underneath rather than what is behind the window. So the translucent
+    /// case gets a single layer and no shadow. A glass panel that casts a hard shadow
+    /// is not what was asked for anyway.
+    /// </para>
     /// </remarks>
     public static (Grid Root, Border Content) Card(CornerRadius radius, double padding)
     {
         var root = new Grid();
+
+        if (Backdrop == Backdrop.Acrylic)
+        {
+            var glass = new Border
+            {
+                CornerRadius = radius,
+                Background = SurfaceBrush,
+                BorderBrush = StrokeBrush,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(padding),
+            };
+
+            root.Children.Add(glass);
+            return (root, glass);
+        }
 
         var background = new Border
         {
@@ -216,7 +241,7 @@ public static class Theme
                 Color = Colors.Black,
                 BlurRadius = 18,
                 ShadowDepth = 2,
-                Opacity = Backdrop == Backdrop.Acrylic ? 0.25 : 0.5,
+                Opacity = 0.5,
                 Direction = 270,
             },
         };

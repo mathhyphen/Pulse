@@ -23,7 +23,7 @@ internal sealed class RailWindow : Window
 {
     private readonly StackPanel _rows = new();
     private readonly Grid _surface;
-    private readonly Border _background;
+    private readonly Border? _background;
     private readonly Border _content;
     private readonly DetailCard _card = new();
     private readonly Dictionary<AccountKey, RailRow> _byKey = new();
@@ -76,7 +76,7 @@ internal sealed class RailWindow : Window
 
         // Kept so the rounding can follow the docking edge. The two layers are the
         // shadow and the surface — see Theme.Card for why they are separate.
-        _background = (Border)root.Children[0];
+        _background = root.Children.Count > 1 ? (Border)root.Children[0] : null;
         _content = content;
 
         Content = root;
@@ -115,7 +115,6 @@ internal sealed class RailWindow : Window
         // where the handle exists. Without it the backdrop is applied the first time
         // somebody touches a setting and not before — so the rail launched solid,
         // and the setting looked like it did nothing until you toggled it twice.
-        ApplyBackdrop();
     }
 
     private const int GwlExStyle = -20;
@@ -330,9 +329,14 @@ internal sealed class RailWindow : Window
     private void ApplyCorners(RailEdge? edge)
     {
         var corners = Theme.DockedCorners(edge, 13);
-        _background.CornerRadius = corners;
+
+        // Absent in the translucent shape, which is a single layer — there is no
+        // shadow there to round. See Theme.Card.
+        if (_background is not null) _background.CornerRadius = corners;
+
         _content.CornerRadius = corners;
     }
+
     // ------------------------------------------------------------------ dragging
 
     /// <summary>
@@ -539,8 +543,12 @@ internal sealed class RailWindow : Window
     {
         var corners = Theme.DockedCorners(_edge, 13);
 
-        _background.CornerRadius = corners;
-        _background.Background = Theme.SurfaceShadowBrush;
+        if (_background is not null)
+        {
+            _background.CornerRadius = corners;
+            _background.Background = Theme.SurfaceShadowBrush;
+        }
+
         _content.CornerRadius = corners;
         _content.Background = Theme.SurfaceBrush;
         _content.BorderBrush = Theme.StrokeBrush;
@@ -548,119 +556,24 @@ internal sealed class RailWindow : Window
         _surface.ContextMenu = BuildMenu();
 
         foreach (var row in _byKey.Values) row.ApplyTheme();
-
-        ApplyBackdrop();
     }
 
-    /// <summary>
-    /// Turns the blurred backdrop on or off for this window.
-    /// </summary>
-    /// <remarks>
-    /// <b>Not a documented API.</b> The documented equivalent, the DWM system
-    /// backdrop, refuses to apply to a layered window — and a layered window is what
-    /// gives this rail its rounded corners and its drop shadow, since WPF needs
-    /// <c>AllowsTransparency</c> for both. This is the call everything on Windows
-    /// uses for blur-behind on a window like that.
-    /// <para>
-    /// The WPF surface stays translucent on top of it, which is what actually lets the
-    /// blur show: at the solid opacity the tint would hide the thing the setting
-    /// exists to reveal.
-    /// </para>
-    /// </remarks>
-    private void ApplyBackdrop()
-    {
-        var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
-        if (handle == IntPtr.Zero) return;
-
-        var acrylic = Theme.Backdrop == Backdrop.Acrylic;
-
-        // The Windows 11 system backdrop. This is the documented one and the one that
-        // actually blurs; it is attempted first because the call below is the fallback
-        // that only tints on a current build.
-        try
-        {
-            var type = acrylic ? DwmsbtTransientWindow : DwmsbtNone;
-            DwmSetWindowAttribute(handle, DwmwaSystemBackdropType, ref type, sizeof(int));
-        }
-        catch (EntryPointNotFoundException)
-        {
-        }
-        catch (DllNotFoundException)
-        {
-        }
-
-        var accent = new AccentPolicy
-        {
-            AccentState = acrylic ? AccentEnableAcrylicBlurBehind : AccentDisabled,
-            // Draw the tint on every side; without this the blur only covers the
-            // frame and the body of the window stays flat.
-            AccentFlags = 2,
-            // ABGR, and deliberately faint — the WPF surface above supplies the
-            // colour, this only has to give the blur something to tint.
-            GradientColor = Theme.IsDark
-                ? unchecked((int)0x40101014)
-                : unchecked((int)0x40F0F0F4),
-        };
-
-        var size = System.Runtime.InteropServices.Marshal.SizeOf<AccentPolicy>();
-        var pointer = System.Runtime.InteropServices.Marshal.AllocHGlobal(size);
-
-        try
-        {
-            System.Runtime.InteropServices.Marshal.StructureToPtr(accent, pointer, false);
-
-            var data = new WindowCompositionAttributeData
-            {
-                Attribute = WcaAccentPolicy,
-                Data = pointer,
-                SizeOfData = size,
-            };
-
-            SetWindowCompositionAttribute(handle, ref data);
-        }
-        catch (EntryPointNotFoundException)
-        {
-            // A Windows without the call simply does not get a blur. The solid
-            // surface is already drawn underneath it, so nothing looks broken.
-        }
-        finally
-        {
-            System.Runtime.InteropServices.Marshal.FreeHGlobal(pointer);
-        }
-    }
-
-    private const int WcaAccentPolicy = 19;
-    private const int AccentDisabled = 0;
-    private const int AccentEnableAcrylicBlurBehind = 4;
-    private const int DwmwaSystemBackdropType = 38;
-    private const int DwmsbtNone = 1;
-    private const int DwmsbtTransientWindow = 3;
-
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr handle, int attribute, ref int value, int size);
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct AccentPolicy
-    {
-        public int AccentState;
-        public int AccentFlags;
-        public int GradientColor;
-        public int AnimationId;
-    }
-
-    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-    private struct WindowCompositionAttributeData
-    {
-        public int Attribute;
-        public IntPtr Data;
-        public int SizeOfData;
-    }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern int SetWindowCompositionAttribute(
-        IntPtr handle, ref WindowCompositionAttributeData data);
-
-    private static double Clamp(double value, double low, double high) =>
+    // There is deliberately no backdrop call here.
+    //
+    // The two Windows blur interfaces were both tried and both measured against a
+    // controlled sixteen-pixel black-and-white stripe pattern behind the rail:
+    // SetWindowCompositionAttribute with ACCENT_ENABLE_ACRYLICBLURBEHIND, and the
+    // documented DWMWA_SYSTEMBACKDROP_TYPE. Neither blurs — the stripes come through
+    // individually, with single-pixel jumps of 122 and 178 where a real thirty-pixel
+    // blur would have smeared them flat. Both refuse a layered window, and a layered
+    // window is what gives this rail its antialiased rounded corners.
+    //
+    // The accent call was not merely useless. It paints its tint over the whole
+    // window *rectangle*, ignoring the shape WPF drew, so the rounded top-left corner
+    // measured (64,63,63) against the desktop's (234,234,233) — square corners, for no
+    // blur. Removing it is what gives the corners back. See windows/README.md.
+private static double Clamp(double value, double low, double high) =>
         high < low ? low : Math.Clamp(value, low, high);
 }
+
 

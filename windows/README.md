@@ -293,15 +293,28 @@ pixel by pixel:
 
 Neither blurs. With acrylic the stripes come through individually, with single-pixel
 jumps of **122** and **178** across them; a real 30-pixel blur would have smeared
-them into a flat field. What the setting does give is a genuinely translucent surface
-— measured at 68 against 30 for solid, over the same backdrop.
+them into a flat field.
 
-The reason is structural: a **layered window** (`AllowsTransparency = true`) is what
-gives this rail its antialiased rounded corners and its drop shadow, and both blur
-APIs refuse to apply to one. Real blur is reachable by dropping the layering and
-clipping the window to a region instead — at the price of hard-edged corners and no
-shadow. That is a trade to be asked about rather than made silently, so the setting
-is named for what it does and the note in Settings says so.
+**The accent call was worse than useless and has been removed.** It paints its tint
+over the whole window *rectangle*, ignoring the shape WPF drew — so the rounded
+corner measured `(64,63,63)` against the desktop's `(234,234,233)`: square corners,
+bought with a blur that never arrived. Removing it is what gives the corners back.
+Measured after: the corner is `(255,255,255)` and the interior `(130,130,131)` under
+acrylic, against `(242,242,242)` and `(29,29,31)` for solid — **rounded and
+translucent at once.**
+
+That fix also exposed a second mistake in the same area. The slab was two layers —
+a background one to cast the shadow, a content one on top — and both were filled with
+the same translucent colour. Two 55% layers stack to 80%, so the surface was more
+opaque than intended and what showed through was the layer underneath rather than
+what was behind the window. A translucent surface can only have one layer, because a
+WPF effect can only cast a shadow from something filled; so acrylic now draws a single
+rounded border with no shadow, and solid keeps the two-layer version with it. A glass
+panel that casts a hard shadow is not what was asked for anyway.
+
+Real blur remains reachable — by dropping the layering and clipping the window to a
+region instead, which costs the antialiased corners and any shadow. That is a trade to
+be asked about rather than made silently.
 
 Verified along the way: `Theme.Dark` renders the slab at `(56,56,59)` and
 `Theme.Light` at `(212,212,213)`.

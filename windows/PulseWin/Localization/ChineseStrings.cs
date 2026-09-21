@@ -210,10 +210,9 @@ public sealed class ChineseStrings : Strings
     public override string SettingsBackdropAcrylic => "亚克力（半透明）";
 
     public override string SettingsBackdropNote =>
-        "亚克力让悬浮条变成半透明，背后的画面会透出来。"
-        + "但**真正的背景模糊做不到**：Windows 的模糊接口要求窗口不是分层的（layered），"
-        + "而悬浮条的圆角和投影正是分层窗口带来的，两者不可兼得。"
-        + "这里给你的是半透明而不是毛玻璃——要毛玻璃就得放弃抗锯齿的圆角和投影。";
+        "亚克力让悬浮条变成半透明，背后的画面会透出来，圆角保持不变（内部亮度实测 130 对纯色的 29）。"
+        + "但它**不模糊**：Windows 的两个模糊接口都试过，对分层窗口都不生效，"
+        + "而分层窗口正是抗锯齿圆角的来源。所以这一档给的是「半透明 + 圆角」，代价是没有投影。";
 
     public override string SettingsStatusOff => "已关闭";
 
