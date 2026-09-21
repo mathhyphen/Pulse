@@ -123,7 +123,11 @@ internal sealed class RailRow : Grid
             _figure.HorizontalAlignment = HorizontalAlignment.Left;
             _figure.VerticalAlignment = VerticalAlignment.Center;
             _figure.TextAlignment = TextAlignment.Left;
+            _figure.Margin = new Thickness(0);
 
+            // Side by side, so both sit in the same row.
+            Grid.SetRow(_ring, 0);
+            Grid.SetRow(_figure, 0);
             Grid.SetColumnSpan(_hit, 3);
             Grid.SetColumn(_hit, 0);
             Grid.SetColumn(_ring, 0);
@@ -131,18 +135,28 @@ internal sealed class RailRow : Grid
         }
         else
         {
-            Height = Theme.RingSize + Theme.RingSpacing + 11;
+            // **Two auto rows, not one fixed height.** The figure has to sit directly
+            // under the ring it reads, and a fixed row height with the figure
+            // bottom-aligned is exactly what put fourteen pixels between them. Letting
+            // the rows measure keeps the number attached whatever the font does.
+            RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+            Height = double.NaN;
             Width = double.NaN;
-            Margin = new Thickness(0);
+            Margin = new Thickness(0, 0, 0, Theme.AccountGap);
 
             _ring.HorizontalAlignment = HorizontalAlignment.Center;
-            _ring.VerticalAlignment = VerticalAlignment.Top;
+            _ring.VerticalAlignment = VerticalAlignment.Center;
 
             _figure.HorizontalAlignment = HorizontalAlignment.Center;
-            _figure.VerticalAlignment = VerticalAlignment.Bottom;
+            _figure.VerticalAlignment = VerticalAlignment.Center;
             _figure.TextAlignment = TextAlignment.Center;
-            _figure.Margin = new Thickness(0, 0, 0, 1);
+            _figure.Margin = new Thickness(0, Theme.FigureGap, 0, 0);
 
+            Grid.SetRow(_ring, 0);
+            Grid.SetRow(_figure, 1);
+            Grid.SetColumnSpan(_hit, 1);
             Grid.SetColumn(_hit, 0);
             Grid.SetColumn(_ring, 0);
             Grid.SetColumn(_figure, 0);

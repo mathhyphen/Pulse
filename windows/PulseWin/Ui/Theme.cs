@@ -24,7 +24,32 @@ public static class Theme
 
     public const double RingSize = 34;
 
-    public const double RingSpacing = 14;
+    /// <summary>
+    /// The gap between a ring and its own figure, measured the way it looks on screen.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Negative, and that is not a mistake.</b> The figure is that ring's reading,
+    /// not a caption for the row, so it has to read as attached to it — and it was
+    /// not: this used to be fourteen, the same value the horizontal gap uses, which
+    /// pushed the number to the bottom of the row and left the space between them
+    /// reading as a divider between two accounts.
+    /// </para>
+    /// <para>
+    /// Setting it to two was not enough either, and the reason is not obvious. A
+    /// <c>TextBlock</c>'s line box is taller than the digits inside it, because the
+    /// font reserves ascent and descent whether or not the glyphs use them — four
+    /// pixels of it, measured. So a margin of zero still leaves white space above the
+    /// glyphs. This cancels that reserve, which makes the number here the gap a reader
+    /// actually sees rather than the gap the layout engine was told about.
+    /// <c>LineHeight</c> would be the tidier mechanism and would clip a descender the
+    /// day a figure contains one.
+    /// </para>
+    /// </remarks>
+    public const double FigureGap = -3;
+
+    /// <summary>Air between one account and the next, so each pair reads as a pair.</summary>
+    public const double AccountGap = 6;
 
     /// <summary>Gap between two items on a horizontal rail.</summary>
     public const double RowGap = 8;

@@ -207,6 +207,27 @@ Removing an account removes its login with it. Leaving the refresh token behind
 would keep a credential for an account the reader has just taken off the rail, and
 re-adding would silently inherit it.
 
+### The figure hugs the ring it reads
+
+A number belongs to the ring above it, not to the row, and it has to look that way.
+It did not: the gap between them was **fourteen** pixels — the same constant the
+horizontal spacing uses — which pushed the number to the bottom of the row and left
+the space between them reading as a divider between two accounts.
+
+Setting it to two was not enough, and the reason is not obvious. A `TextBlock`'s line
+box is taller than the digits inside it, because the font reserves ascent and descent
+whether or not the glyphs use them — four pixels of it, measured. So a margin of zero
+still leaves white space above the glyphs, and the value in `Theme.FigureGap` is
+**negative** to cancel that reserve. It is the gap a reader sees rather than the gap
+the layout engine was told about; `LineHeight` would be the tidier mechanism and would
+clip a descender the day a figure contains one.
+
+Measured after: ring bottom at y=41, glyph top at y=44 — **two pixels**. Four accounts
+went from 254 pixels tall to 222.
+
+The two gaps are separate constants now, because conflating them is what caused this:
+`FigureGap` is the space inside an account, `AccountGap` the space between two of them.
+
 ### The top edge is a bar, not a rotated strip
 
 The two orientations are genuinely different layouts:

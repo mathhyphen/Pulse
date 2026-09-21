@@ -49,6 +49,15 @@ public sealed class AppController
         BuildRail(settings);
         BuildTray();
 
+        // **Draw the rail before the first reading arrives.** Rows are created from
+        // the store's snapshot, and the first snapshot only lands when the opening
+        // refresh finishes — a few seconds of four network calls. Until then the rail
+        // was an empty shell: it appeared, but as an 18-pixel sliver that grew into
+        // its real shape once the readings came back. Rendering here gives it the
+        // right size immediately, with every figure as a placeholder, and the
+        // refresh fills them in.
+        _rail?.Render(_store.Snapshot());
+
         _clock.Interval = TimeSpan.FromMinutes(settings.RefreshMinutes);
         _clock.Tick += (_, _) => _ = RefreshAsync();
         _clock.Start();
