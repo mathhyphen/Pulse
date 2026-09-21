@@ -208,6 +208,15 @@ public sealed class AppController
         try
         {
             await _store.RefreshAllAsync();
+
+            // **The interval answers "how often is often enough", not "how long may a
+            // stumble stay on screen".** Those are the same question until a pass
+            // fails on a long interval, where one bad fetch meant an hour of four
+            // empty rows. A failed pass now comes back inside a minute.
+            var settings = AppSettings.Current;
+            _clock.Interval = _store.AnyFailed
+                ? TimeSpan.FromSeconds(Math.Min(60, settings.RefreshMinutes * 60))
+                : TimeSpan.FromMinutes(settings.RefreshMinutes);
         }
         finally
         {
@@ -223,7 +232,15 @@ public sealed class AppController
         foreach (var (account, state) in _store.Snapshot())
         {
             var reading = state.Reading;
-            if (reading is null) continue;
+
+            // **A failed account is named, not skipped.** It used to be dropped from
+            // the tooltip entirely, so the one place that summarises the rail was also
+            // the one place a broken account could not be seen.
+            if (reading is null)
+            {
+                if (state.LastFailure is { } failed) parts.Add($"{account.DisplayLabel}: {failed.Message()}");
+                continue;
+            }
 
             var figure = reading.Fullest is not null
                 ? reading.HeadlineText(AppSettings.Current.ShowsRemaining)

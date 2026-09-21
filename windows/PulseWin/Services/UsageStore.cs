@@ -51,8 +51,32 @@ public sealed class UsageStore
     private readonly Dictionary<AccountKey, AccountState> _states = new();
     private readonly object _gate = new();
 
+    public UsageStore()
+    {
+        // **Start from what was last seen, not from nothing.** A launch would
+        // otherwise be blind until the opening refresh lands — a few seconds of four
+        // network calls — and blind for a whole interval if that refresh fails, which
+        // shows as four empty rows and reads as the app being broken.
+        foreach (var (key, reading) in ReadingCache.Load())
+        {
+            if (AccountKey.TryParse(key, out var account))
+                _states[account] = new AccountState { Reading = reading };
+        }
+    }
+
     /// <summary>Raised on the thread that finished a refresh; the UI marshals.</summary>
     public event Action? Changed;
+
+    /// <summary>
+    /// Whether the last pass left any account without a fresh answer.
+    /// </summary>
+    /// <remarks>
+    /// Read by the controller to come back sooner than the configured interval. A
+    /// caller-set interval answers "how often is often enough", not "how long should a
+    /// stumbled fetch stay wrong" — and on a long interval those are very different
+    /// questions. One failed pass used to mean an hour of an empty rail.
+    /// </remarks>
+    public bool AnyFailed { get; private set; }
 
     public AccountState? StateFor(AccountKey key)
     {
@@ -94,6 +118,18 @@ public sealed class UsageStore
 
         var work = accounts.Select(account => RefreshOneAsync(account, cancellationToken));
         await Task.WhenAll(work);
+
+        // After the pass, not during it: one account's failure must not leave the
+        // others unsaved.
+        lock (_gate)
+        {
+            AnyFailed = accounts.Any(a => _states.TryGetValue(a.Key, out var s) && s.LastFailure is not null);
+
+            ReadingCache.Save(_states
+                .Where(pair => pair.Value.Reading is not null)
+                .ToDictionary(pair => pair.Key.ToString(), pair => pair.Value.Reading!));
+        }
+
         Changed?.Invoke();
     }
 
@@ -141,10 +177,9 @@ public sealed class UsageStore
                 state.LastFailure = fresh.Unavailable ?? Unavailability.UnreadableReply;
                 state.ConsecutiveFailures++;
 
-                // Keep the older reading, but record why the panel is stale. The UI
-                // dims it and names the failure rather than going blank.
-                if (state.Reading is { } previous && state.ConsecutiveFailures == 1)
-                    state.Reading = previous;
+                // Keep the older reading — whether it came from this session or from
+                // the cache — but record why the panel is stale. The UI dims it and
+                // names the failure rather than going blank.
             }
         }
     }

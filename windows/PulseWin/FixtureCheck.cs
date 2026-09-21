@@ -294,6 +294,30 @@ public static class FixtureCheck
                 new DeepSeekService.Purse("CNY", 50, null, null), DeepSeekBasis.Budget, 10, withPeak, true);
             Check("a healthy account over its budget is not marked spent",
                 healthyButOverBudget.Count == 1 && !healthyButOverBudget[0].IsExhausted);
+
+            // **Money with no window is no fraction, and that is not a fraction of
+            // zero.** Counting down made the two collide — `1 - 0` is a full ring — so
+            // an account reporting no allowance at all drew a complete green circle
+            // saying it had everything left. The rail reads `HasFraction` to tell the
+            // two apart; this pins the side of it that comes from the service.
+            var moneyOnly = DeepSeekService.BuildWindows(
+                new DeepSeekService.Purse("CNY", 66.11, null, null),
+                DeepSeekBasis.BalanceOnly, null, withPeak, true);
+
+            Check("balance-only produces no fraction to draw", moneyOnly.Count == 0,
+                $"got {moneyOnly.Count} window(s)");
+
+            var asReading = new ProviderUsage
+            {
+                Account = AccountKey.Primary(Provider.DeepSeek),
+                Windows = moneyOnly,
+                CreditBalance = "¥66.11",
+                CreditRemaining = new CreditInfo(66.11, "CNY"),
+            };
+
+            Check("and the rail is told there is nothing to draw",
+                asReading.Fullest is null && asReading.ReportsSomething,
+                "a balance is an answer, but it is not an arc");
         }
         log.AppendLine();
 

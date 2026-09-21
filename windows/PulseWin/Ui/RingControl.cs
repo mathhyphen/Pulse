@@ -48,6 +48,20 @@ public sealed class RingControl : FrameworkElement
     /// <summary>Whether there is a reading at all. False dims the whole ring.</summary>
     public bool HasReading { get; set; } = true;
 
+    /// <summary>
+    /// Whether this account reported a fraction to draw at all.
+    /// </summary>
+    /// <remarks>
+    /// <b>Not the same question as <see cref="HasReading"/>, and not the same as
+    /// <see cref="UsedFraction"/> being zero.</b> DeepSeek in its balance-only mode
+    /// answers with money and no window, so it has no fraction — and a fraction of
+    /// zero means "nothing used", which is a different statement. Counting down made
+    /// the two collide: <c>1 - 0</c> is a full ring, so an account with no allowance
+    /// at all drew a complete green circle saying it had everything left. With this
+    /// false, no arc is drawn and the figure beside it is the whole reading.
+    /// </remarks>
+    public bool HasFraction { get; set; } = true;
+
     /// <summary>How far through the window, 0...1, for the outer arc. NaN draws none.</summary>
     public double ElapsedFraction { get; set; } = double.NaN;
 
@@ -112,10 +126,13 @@ public sealed class RingControl : FrameworkElement
         // whatever the provider said, so a spend limit at 130% still displays 130%.
         var used = Math.Clamp(UsedFraction, 0, 1);
 
-        // A spent window is a full ring whichever way the figure runs.
-        var arc = IsExhausted || used >= 1
-            ? 1
-            : ShowsRemaining ? 1 - used : used;
+        // A spent window is a full ring whichever way the figure runs. A window that
+        // was never reported gets no arc at all — see HasFraction.
+        var arc = !HasFraction
+            ? 0
+            : IsExhausted || used >= 1
+                ? 1
+                : ShowsRemaining ? 1 - used : used;
 
         if (arc > 0)
         {

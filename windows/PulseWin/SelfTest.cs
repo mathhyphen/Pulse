@@ -110,6 +110,32 @@ public static class SelfTest
             .Concat(cached.Accounts.Where(a => !a.Key.IsPrimary))
             .ToList();
 
+        // **The way the rail actually does it: every account at once.** The loop below
+        // fetches them one after another, and the two paths did not agree — four
+        // accounts answered when asked in sequence and two of the same four failed
+        // when asked together, which sent this diagnostic looking in the wrong place
+        // for a while. Reporting both is what makes the difference visible.
+        report.AppendLine("CONCURRENT PASS (exactly what the rail does when it refreshes)");
+        report.AppendLine();
+
+        var concurrent = new UsageStore();
+        await concurrent.RefreshAllAsync();
+
+        foreach (var (account, state) in concurrent.Snapshot())
+        {
+            var said = state.Reading is not null
+                ? $"read ok ({state.Reading.Windows.Count} window(s))"
+                : $"FAILED — {state.LastFailure?.Message() ?? "no reading and no stated reason"}";
+
+            report.AppendLine($"  {account.DisplayLabel,-18} {said}");
+        }
+
+        report.AppendLine($"  any failed: {concurrent.AnyFailed}");
+        report.AppendLine();
+        report.AppendLine(new string('-', 78));
+        report.AppendLine("SEQUENTIAL FETCH (one at a time, for comparison)");
+        report.AppendLine();
+
         foreach (var account in accounts)
         {
             var usage = await Fetch(account);

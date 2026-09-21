@@ -33,6 +33,28 @@ public sealed record AccountKey(Provider Provider, string Id)
     public bool IsPrimary => Id == Provider.ToString();
 
     public override string ToString() => $"{Provider}:{Id}";
+
+    /// <summary>
+    /// Reads back what <see cref="ToString"/> wrote, for the reading cache.
+    /// </summary>
+    /// <remarks>
+    /// The cache is keyed by this string rather than by a nested object because a
+    /// dictionary key has to be a scalar — and an account id may itself contain a
+    /// colon, so only the first one separates the two halves.
+    /// </remarks>
+    public static bool TryParse(string? text, out AccountKey key)
+    {
+        key = null!;
+        if (string.IsNullOrEmpty(text)) return false;
+
+        var split = text.IndexOf(':');
+        if (split <= 0 || split == text.Length - 1) return false;
+
+        if (!Enum.TryParse<Provider>(text[..split], out var provider)) return false;
+
+        key = new AccountKey(provider, text[(split + 1)..]);
+        return true;
+    }
 }
 
 /// <summary>One account on the rail: which service, what to call it, and whether it is switched on.</summary>

@@ -286,6 +286,51 @@ rather than at each call site, so the next caller cannot forget it.
 Verified by injecting a real drag and reading the window rectangle after each step:
 ten 12-pixel moves, **zero drift**, with the grab offset preserved.
 
+## When a fetch fails
+
+A report came in as "Codex and OpenCode Go show they cannot reach the service". Both
+services were reachable — a direct call answered `200` in 1.6 seconds, and a
+self-test fetched all four live. The app's *own* opening pass had failed for some
+accounts, and three separate things then conspired to keep it that way:
+
+- **No retry.** A failed account waited for the next scheduled pass.
+- **A long interval made that expensive.** The refresh period is the reader's to
+  set, and at 60 minutes a single stumble meant an hour of four empty rows.
+- **No cache.** A launch with a failed opening pass had nothing to fall back on —
+  not even the readings the previous session had.
+
+All three are fixed:
+
+- **The last reading is kept on disk** (`cache.json`, `ReadingCache`) and drawn from
+  the first frame of the next launch, marked stale until a fresh answer lands. A
+  reading that is stale and labelled beats no reading at all.
+- **A failed pass comes back within a minute**, whatever the configured interval. The
+  interval answers "how often is often enough", not "how long may a stumble stay on
+  screen" — the same question until a pass fails, and then not.
+- **The tray tooltip names a failed account** rather than skipping it. It was the one
+  place summarising the rail and the one place a broken account could not be seen.
+
+The cache serializes with `IgnoreReadOnlyProperties`, which skips every computed
+member at once — `IsLive`, `Fullest`, `RailMoney`, a window's localised `Name`. None
+belong on disk; the name in particular would freeze in whichever language happened to
+be current when the file was written.
+
+### A full green ring for an account that reports no allowance
+
+Found while verifying the above, by rendering the whole rail rather than sampling it.
+DeepSeek in its balance-only mode answers with money and no window, so it has no
+fraction — and counting down made that collide with a fraction of *zero*:
+`1 - 0` is a full ring. An account with no allowance at all was drawing a complete
+green circle saying it had everything left.
+
+`HasFraction` now separates the two. The rail draws no arc for a reading that
+reported no window, and the money beside it is the whole reading.
+
+**The first attempt to reproduce the report was wrong**, and worth recording: the
+per-row sampler assumed a 55-pixel row against an actual 51, so by the fourth row it
+was reading the wrong band and "confirmed" a failure that was not there. Rendering
+the block whole is what showed both the truth and the bug underneath it.
+
 ## Appearance
 
 **Theme** — Dark, Light, or Follow Windows (the default, read from the same registry

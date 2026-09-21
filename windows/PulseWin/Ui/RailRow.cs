@@ -189,6 +189,7 @@ internal sealed class RailRow : Grid
         if (reading is null)
         {
             _ring.UsedFraction = 0;
+            _ring.HasFraction = false;
             _ring.ElapsedFraction = double.NaN;
             _ring.IsExhausted = false;
 
@@ -204,6 +205,9 @@ internal sealed class RailRow : Grid
 
         _ring.UsedFraction = fullest?.UsedFraction ?? 0;
         _ring.IsExhausted = fullest?.IsExhausted ?? false;
+        // Money with no window has no fraction to draw, and that is not the same as a
+        // fraction of zero. See RingControl.HasFraction.
+        _ring.HasFraction = fullest is not null;
         _ring.ElapsedFraction = fullest?.ElapsedFraction(now) ?? double.NaN;
         _ring.ShowsRemaining = showsRemaining;
 
