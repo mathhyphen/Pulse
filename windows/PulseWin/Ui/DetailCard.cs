@@ -34,7 +34,11 @@ internal sealed class DetailCard : Popup
 
         _body = new StackPanel { Width = 268 };
 
-        var (root, content) = Theme.Card(new CornerRadius(12), 13);
+        // **Opaque, whatever the rail's transparency is set to.** This is where the
+        // numbers and their explanations live; letting the desktop through it is how a
+        // reader ends up unable to see the very thing they hovered to see. The first
+        // version tinted both, and a 45% card over a light desktop was invisible.
+        var (root, content) = Theme.Card(new CornerRadius(12), 13, opaque: true);
         content.Child = _body;
         Child = root;
     }

@@ -542,10 +542,16 @@ internal sealed class RailWindow : Window
     /// </remarks>
     private (Grid Surface, Border? Background, Border Content) BuildSurface()
     {
-        var (root, content) = Theme.Card(Theme.DockedCorners(_edge, 13), 0);
+        // **Detach first, and this is not tidiness — the app crashed without it.**
+        // An element can have exactly one logical parent, and assigning one that
+        // already has a parent to a new `Child` does not quietly re-parent it: WPF
+        // throws "Specified element is already the logical child of another element".
+        // The comment that used to sit here claimed the assignment *was* the detach.
+        // It is not, and the symptom was the app vanishing the moment a reader changed
+        // the theme or the surface in Settings.
+        if (_rows.Parent is Decorator previous) previous.Child = null;
 
-        // Re-parenting is the repaint: a element can only have one parent, so putting
-        // the rows into the new content detaches them from the old one.
+        var (root, content) = Theme.Card(Theme.DockedCorners(_edge, 13), 0);
         content.Child = _rows;
         root.ContextMenu = BuildMenu();
 

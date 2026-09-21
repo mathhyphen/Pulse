@@ -359,6 +359,39 @@ The surface is now remade rather than recoloured, which is the only way a change
 layer *count* can take effect. `ApplyTheme` rebuilds the card, re-parents the rows
 into it, and re-docks.
 
+### The surface is remade, and the rows have to be detached first
+
+Reported as "I changed a colour and it closed itself". It did, and the cause was a
+comment of mine that was simply wrong.
+
+Remaking the surface means moving the rows into a new card, and the comment claimed
+that assigning them *was* the detach — "an element can only have one parent, so
+putting the rows into the new content detaches them from the old one". WPF does not
+do that. It throws:
+
+> Specified element is already the logical child of another element.
+
+so the app vanished the moment a reader touched the theme or surface picker. The old
+parent is now cleared explicitly first.
+
+`--selftest` drives the rail through five appearance combinations on **its own STA
+thread** — a `FrameworkElement` cannot be constructed without one, and by that point
+the self-test has already awaited a network call, so the continuation is on an MTA
+thread-pool thread. The check was validated by disabling the fix and confirming it
+reports `5 combination(s) threw`, rather than being a test that cannot fail.
+
+### The rail may be see-through; the hover card may not
+
+The transparency setting tinted everything that used `SurfaceBrush`, which included the
+hover card. At 45% over a light desktop the card was invisible — "I hover a ring and
+cannot see it".
+
+A rail is scenery and can be as transparent as the reader likes. A card is where the
+numbers and their explanations are, and letting the desktop through it defeats the
+reason it was opened. `OpaqueSurfaceBrush` is always fully opaque, `Theme.Card` takes
+an `opaque` flag, and the card passes it. Asserted in `--selftest`: at 15%
+transparency the rail's brush reads 38/255 and the card's 255/255.
+
 ### Transparency is a slider, not a third preset
 
 "How transparent" is a degree, and the reader who wants to see their wallpaper through

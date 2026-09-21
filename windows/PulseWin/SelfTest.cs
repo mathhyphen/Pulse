@@ -152,6 +152,7 @@ public static class SelfTest
         report.AppendLine();
         DescribeLocalisation(report);
         DescribeIcons(report);
+        DescribeSurfaceRebuild(report);
 
         report.AppendLine();
         report.AppendLine(new string('-', 78));
@@ -181,6 +182,104 @@ public static class SelfTest
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Drives the rail through every appearance combination, the way Settings does.
+    /// </summary>
+    /// <remarks>
+    /// <b>On its own STA thread, deliberately.</b> A <c>FrameworkElement</c> cannot be
+    /// constructed without one, and by the time this runs the self-test has already
+    /// awaited a network call — so the continuation is on a thread-pool thread, which
+    /// is MTA. The first version of this threw <i>"the calling thread must be STA"</i>
+    /// from <c>RailWindow</c>'s constructor rather than testing anything.
+    /// </remarks>
+    private static void DescribeSurfaceRebuild(StringBuilder report)
+    {
+        var body = new StringBuilder();
+        var escaped = "";
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                CycleAppearances(body);
+            }
+            catch (Exception e)
+            {
+                escaped = $"{e.GetType().Name}: {e.Message}";
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(60));
+
+        report.AppendLine(new string('-', 78));
+        report.AppendLine("THEME AND SURFACE CHANGES (the path that used to crash)");
+        report.AppendLine();
+        report.Append(body);
+
+        if (escaped.Length > 0)
+            report.AppendLine($"  the pass itself threw — {escaped}");
+
+        report.AppendLine();
+    }
+
+    private static void CycleAppearances(StringBuilder report)
+    {
+        (string What, AppTheme Theme, Backdrop Backdrop, double Opacity)[] attempts =
+        [
+            ("dark + solid", AppTheme.Dark, Backdrop.Solid, 0.55),
+            ("dark + translucent", AppTheme.Dark, Backdrop.Acrylic, 0.55),
+            ("light + translucent", AppTheme.Light, Backdrop.Acrylic, 0.30),
+            ("light + solid", AppTheme.Light, Backdrop.Solid, 0.55),
+            ("dark + translucent again", AppTheme.Dark, Backdrop.Acrylic, 0.55),
+        ];
+
+        // A real rail, remade the way the controller remakes it. The bug this exists
+        // for was a re-parenting exception that only fired on the *second* change —
+        // the first built the surface, the second tried to move the rows into a new
+        // one — so a single attempt would have passed while the app still vanished the
+        // moment a reader touched the theme picker.
+        var rail = new Ui.RailWindow();
+        var failures = 0;
+
+        foreach (var (what, theme, backdrop, opacity) in attempts)
+        {
+            try
+            {
+                Theme.Apply(theme, backdrop, opacity);
+                rail.ApplyTheme();
+                report.AppendLine($"  OK    {what}");
+            }
+            catch (Exception e)
+            {
+                failures++;
+                report.AppendLine($"  FAIL  {what} — {e.GetType().Name}: {e.Message}");
+            }
+        }
+
+        report.AppendLine();
+        report.AppendLine(failures == 0
+            ? "  the surface survives being remade"
+            : $"  {failures} combination(s) threw — changing this in Settings would close the app");
+
+        // **The rail may be as see-through as the reader likes; the card may not.**
+        // The card is where the numbers and their explanations are, and the first
+        // version tinted both — a 45% card over a light desktop was invisible, which is
+        // what "I hover a ring and cannot see it" was.
+        Theme.Apply(AppTheme.Dark, Backdrop.Acrylic, 0.15);
+
+        var railAlpha = Theme.SurfaceBrush.Color.A;
+        var cardAlpha = Theme.OpaqueSurfaceBrush.Color.A;
+
+        report.AppendLine();
+        report.AppendLine($"  at 15% transparency: the rail's brush is {railAlpha}/255 opaque, "
+                          + $"the hover card's is {cardAlpha}/255");
+        report.AppendLine(railAlpha < 255 && cardAlpha == 255
+            ? "  OK    the card ignores the rail's transparency"
+            : "  FAIL  the card is not fully opaque");
     }
 
     private static void DescribeIcons(StringBuilder report)

@@ -93,16 +93,17 @@ public static class Theme
     public static SolidColorBrush SurfaceBrush { get; private set; } = Brushes.Black;
 
     /// <summary>
-    /// The surface colour with no transparency, for the shadow layer underneath.
+    /// The surface colour with no transparency at all, for anything being read.
     /// </summary>
     /// <remarks>
-    /// The shadow sits on its own sibling rather than on the content, because a WPF
-    /// <c>Effect</c> renders its element's whole subtree through an intermediate
-    /// surface and costs the text its ClearType. Keeping that layer opaque is what
-    /// makes the shadow read as a shadow rather than as a halo around something
-    /// half-transparent.
+    /// <b>The hover card uses this, and the rail does not.</b> A rail is scenery and
+    /// can be as see-through as the reader likes; a card is where the numbers and
+    /// their explanations are, and letting the desktop through it is how somebody ends
+    /// up unable to read the very thing they hovered to read. The first version of the
+    /// transparency setting tinted both, and a 45% card over a light desktop was
+    /// nearly invisible.
     /// </remarks>
-    public static SolidColorBrush SurfaceShadowBrush { get; private set; } = Brushes.Black;
+    public static SolidColorBrush OpaqueSurfaceBrush { get; private set; } = Brushes.Black;
 
     public static SolidColorBrush PanelBrush { get; private set; } = Brushes.Black;
 
@@ -188,7 +189,8 @@ public static class Theme
             : (byte)0xF0;
 
         SurfaceBrush = Brush(Argb(alpha, Surface.R, Surface.G, Surface.B));
-        SurfaceShadowBrush = Brush(Argb(alpha, Surface.R, Surface.G, Surface.B));
+        // Always full alpha, whatever the reader set the rail to. See the note on it.
+        OpaqueSurfaceBrush = Brush(Surface);
         PanelBrush = Brush(Panel);
         FieldBrush = Brush(Field);
         PrimaryBrush = Brush(PrimaryText);
@@ -231,6 +233,12 @@ public static class Theme
     /// <summary>
     /// The rounded slab.
     /// </summary>
+    /// <param name="opaque">
+    /// True for a surface that is being <i>read</i> rather than sat on — the hover
+    /// card. It ignores the rail's transparency, because a card is where the numbers
+    /// and their explanations are, and letting the desktop through it is how a reader
+    /// ends up unable to see the thing they hovered to see.
+    /// </param>
     /// <remarks>
     /// <para>
     /// <b>Two layers when solid, one when translucent.</b> A WPF <c>Effect</c> renders
@@ -249,16 +257,20 @@ public static class Theme
     /// is not what was asked for anyway.
     /// </para>
     /// </remarks>
-    public static (Grid Root, Border Content) Card(CornerRadius radius, double padding)
+    public static (Grid Root, Border Content) Card(CornerRadius radius, double padding, bool opaque = false)
     {
         var root = new Grid();
 
-        if (Backdrop == Backdrop.Acrylic)
+        // The rail follows the reader's transparency; a card never does.
+        var translucent = !opaque && Backdrop == Backdrop.Acrylic;
+        var fill = opaque ? OpaqueSurfaceBrush : SurfaceBrush;
+
+        if (translucent)
         {
             var glass = new Border
             {
                 CornerRadius = radius,
-                Background = SurfaceBrush,
+                Background = fill,
                 BorderBrush = StrokeBrush,
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(padding),
@@ -271,7 +283,7 @@ public static class Theme
         var background = new Border
         {
             CornerRadius = radius,
-            Background = SurfaceShadowBrush,
+            Background = fill,
             Effect = new DropShadowEffect
             {
                 Color = Colors.Black,
