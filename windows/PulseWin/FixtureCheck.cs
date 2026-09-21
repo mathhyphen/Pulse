@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using PulseWin.Auth;
 using PulseWin.Core;
 using PulseWin.Providers;
 using PulseWin.Storage;
@@ -378,6 +379,88 @@ public static class FixtureCheck
             Check("3% used reads 3% counting up and 97% counting down",
                 window.PercentText() == "3%" && window.PercentText(remaining: true) == "97%",
                 $"{window.PercentText()} / {window.PercentText(remaining: true)}");
+        }
+
+        log.AppendLine("Codex extra accounts — the store and the token plumbing");
+        {
+            // The sign-in itself needs a human at a browser, so it cannot be driven
+            // here. Everything it hands its result to can be, and those are the parts
+            // that would silently do the wrong thing: the encrypted store, the purpose
+            // separation, the renewal boundary, and reading an account id out of a
+            // token that keeps it nested.
+
+            var key = new AccountKey(Provider.Codex, "fixture-account");
+            var credentials = new AccountCredentials
+            {
+                AccessToken = "fixture-access",
+                RefreshToken = "fixture-refresh",
+                ExpiresAt = DateTimeOffset.Now.AddHours(1),
+                ServiceAccountId = "acct-1",
+                Email = "somebody@example.com",
+            };
+
+            AccountCredentialStore.Set(key, credentials);
+            var read = AccountCredentialStore.For(key);
+
+            Check("a login survives the encrypted store",
+                read?.RefreshToken == "fixture-refresh"
+                && read.ServiceAccountId == "acct-1"
+                && read.Email == "somebody@example.com",
+                $"read back {read?.RefreshToken}/{read?.ServiceAccountId}");
+
+            Check("a token an hour out does not need renewing",
+                read?.NeedsRenewal(DateTimeOffset.Now) == false);
+
+            Check("a token inside the minute of slack does",
+                new AccountCredentials { ExpiresAt = DateTimeOffset.Now.AddSeconds(30) }
+                    .NeedsRenewal(DateTimeOffset.Now));
+
+            AccountCredentialStore.Remove(key);
+            Check("removing an account takes its login with it",
+                AccountCredentialStore.For(key) is null);
+
+            // **The purpose string is what stops one store's box being opened by
+            // another.** README claims it; this is the assertion that keeps it true.
+            var scratch = Path.Combine(Path.GetTempPath(), "pulsewin-fixture-box.dat");
+            try
+            {
+                var payload = new Dictionary<string, string> { ["k"] = "v" };
+                EncryptedFile.Save(scratch, "purpose-a", payload);
+
+                var same = EncryptedFile.Load<Dictionary<string, string>>(scratch, "purpose-a");
+                var other = EncryptedFile.Load<Dictionary<string, string>>(scratch, "purpose-b");
+
+                Check("a box opens with the purpose that wrote it", same?["k"] == "v");
+                Check("and not with a different one", other is null,
+                    "a box from keys.dat must not open as accounts.dat");
+            }
+            finally
+            {
+                if (File.Exists(scratch)) File.Delete(scratch);
+            }
+
+            // A token shaped the way OpenAI's is: an email at the top level and the
+            // account id nested under a namespace, in the access token only.
+            static string Segment(string json) => Convert.ToBase64String(
+                    System.Text.Encoding.UTF8.GetBytes(json))
+                .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+            var token = Segment("""{"alg":"none"}""") + "." + Segment(
+                """{"email":"a@b.c","https://api.openai.com/auth":{"chatgpt_account_id":"acct-9"}}""")
+                + ".signature";
+
+            var claims = Jwt.Claims(token);
+            var auth = claims?.Field("https://api.openai.com/auth");
+
+            Check("the account id is read from the namespaced claim, not the top level",
+                auth is not null && auth.Value.Str("chatgpt_account_id") == "acct-9",
+                $"got {auth?.Text("chatgpt_account_id") ?? "nothing"}");
+
+            Check("the email is read from the top level",
+                claims?.Str("email") == "a@b.c");
+
+            Check("something that is not a JWT is refused rather than throwing",
+                Jwt.Claims("not-a-jwt") is null && Jwt.Claims("") is null);
         }
 
         log.AppendLine();

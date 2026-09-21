@@ -99,10 +99,15 @@ public static class SelfTest
         report.AppendLine();
 
         // Every provider, not just the enabled ones: a self-test that skipped the
-        // unconfigured ones would pass on a machine where nothing is set up.
+        // unconfigured ones would pass on a machine where nothing is set up. Plus any
+        // added account, which is the only place the signed-in fetch path is reachable
+        // — it went untested for a while precisely because this list did not include
+        // them.
+        var cached = AppSettings.Current;
         var store = new UsageStore();
         var accounts = ProviderCatalog.All
             .Select(provider => new MonitoredAccount { Key = AccountKey.Primary(provider) })
+            .Concat(cached.Accounts.Where(a => !a.Key.IsPrimary))
             .ToList();
 
         foreach (var account in accounts)
