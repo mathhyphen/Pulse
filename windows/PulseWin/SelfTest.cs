@@ -167,15 +167,29 @@ public static class SelfTest
         report.AppendLine();
     }
 
-    private static Task<ProviderUsage> Fetch(MonitoredAccount account) =>
-        account.Key.Provider switch
+    /// <summary>
+    /// Fetches one provider the way the app does.
+    /// </summary>
+    /// <remarks>
+    /// The pasted key is passed in, because that is what <c>UsageStore</c> does. The
+    /// first version of this passed null and let each service find its own fallback,
+    /// which meant a stored key reported "none has been entered" — a self-test that
+    /// was quietly testing a path the app never takes.
+    /// </remarks>
+    private static Task<ProviderUsage> Fetch(MonitoredAccount account)
+    {
+        var provider = account.Key.Provider;
+        var entered = CredentialStore.Key(provider);
+
+        return provider switch
         {
             Provider.Codex => CodexService.FetchAsync(account),
-            Provider.OpenCodeGo => OpenCodeGoService.FetchAsync(account.Key, null),
-            Provider.Zhipu or Provider.Zai => ZhipuService.FetchAsync(account.Key, null),
-            Provider.DeepSeek => DeepSeekService.FetchAsync(account.Key, null),
+            Provider.OpenCodeGo => OpenCodeGoService.FetchAsync(account.Key, entered),
+            Provider.Zhipu or Provider.Zai => ZhipuService.FetchAsync(account.Key, entered),
+            Provider.DeepSeek => DeepSeekService.FetchAsync(account.Key, entered),
             _ => Task.FromResult(ProviderUsage.Failed(account.Key, Unavailability.NoLimitsReported)),
         };
+    }
 
     /// <summary>
     /// Reports the localisation, and proves the Chinese is real glyphs.

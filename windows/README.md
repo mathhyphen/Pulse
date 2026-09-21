@@ -166,6 +166,68 @@ monitor.
 taskbar but not out of Alt-Tab, and an always-on-top strip in the window switcher
 is a window, not a monitor.
 
+### Adding a Codex account
+
+There is **no field to paste a token into**, and that is the design rather than an
+omission. Settings › Codex accounts › **Sign in to another account** runs OpenAI's
+device-code flow: it shows a short code, opens `auth.openai.com/codex/device`, and
+polls until the sign-in is approved.
+
+Pasting a copied token is what this first did, and it does not work. A Codex access
+token lasts on the order of 240 hours, so a pasted one dies in about ten days — and
+the only thing that can renew it is the refresh token the Codex CLI is also relying
+on, which means trying to fix the ring signs you out of your own Codex. Upstream
+measured this and moved to a real sign-in for the same reason. A signed-in account
+here has its own refresh token and touches nothing that belongs to the CLI.
+
+The flow is **OpenAI's device-code shape, which is not RFC 8628's**. They share a
+name and almost nothing else:
+
+| | This one | RFC 8628 |
+|---|---|---|
+| Request bodies | JSON | form |
+| "Still waiting" | **403 and 404** | `authorization_pending` in a 400 |
+| Proof key | the provider generates it | the client generates it |
+
+Both halves of that were verified against the live service before the code was
+written, not inferred: `POST /api/accounts/deviceauth/usercode` answers `200` with
+`device_auth_id`, `user_code` and — note — **`"interval": "5"` as a string**, and
+polling an unapproved code answers `403 Device authorization is pending.` The reply
+also carries `expires_at`, which is used rather than a fixed fifteen-minute guess;
+a guess would keep polling a code the service has already discarded and then report
+the failure as the reader's.
+
+Two smaller things it inherits from upstream's notes: the exchange sends **four
+fields and not `state`** (Anthropic's takes a state, this one does not), and the
+form body is percent-encoded strictly — a general-purpose encoder leaves `:` and
+`/` alone and passes `+` through as a space, which is a different string than the
+one that was signed.
+
+Removing an account removes its login with it. Leaving the refresh token behind
+would keep a credential for an account the reader has just taken off the rail, and
+re-adding would silently inherit it.
+
+### Moving the rail
+
+Drag it anywhere with the left button. Let go:
+
+- **near an edge** → it docks there, flush, and the position along that edge is
+  remembered;
+- **in open desktop** → it stays exactly where it was put, and stays there across
+  restarts.
+
+The snap distance is 160 px and deliberately generous, because a drop clearly aimed
+at an edge that lands a few pixels short reads as the snapping being broken rather
+than as the drop having missed. Double-click — or the right-click menu's *Put the
+rail back on its edge* — returns it to a centred dock, which is also the only way
+back from a rail dragged half off the screen.
+
+**The docked side is squared off.** Rounding all four corners and sitting the slab
+flush leaves two small crescents of desktop showing through at the corners, which
+undoes the flush position: the slab still reads as floating. Verified by sampling
+the corner pixel — `(29,29,31)` where a rounded corner would show the desktop's
+`(255,255,255)`.
+
 ## The provider marks
 
 Each ring carries the product's own mark, taken from the fork's

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using PulseWin.Auth;
 using PulseWin.Core;
 using PulseWin.Localization;
 using PulseWin.Providers;
@@ -649,15 +650,22 @@ internal sealed class SettingsWindow : Window
 
         var added = settings.Accounts.Where(a => a.Key.Provider == Provider.Codex && !a.Key.IsPrimary).ToList();
 
+        if (added.Count == 0)
+            _codexAccounts.Children.Add(Caption(Loc.Current.SignInNone));
+
         foreach (var account in added)
         {
             var row = new Grid { Margin = new Thickness(0, 4, 0, 4) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            var held = AccountCredentialStore.For(account.Key);
+
             var label = new TextBlock
             {
-                Text = account.DisplayLabel,
+                // The email the sign-in reported, so two subscriptions are not both
+                // offered to the reader as "Codex".
+                Text = held?.Email is { Length: > 0 } email ? email : account.DisplayLabel,
                 FontSize = 12,
                 VerticalAlignment = VerticalAlignment.Center,
                 Foreground = Theme.PrimaryBrush,
@@ -676,6 +684,10 @@ internal sealed class SettingsWindow : Window
             };
             remove.Click += (_, _) =>
             {
+                // The login goes with the row. Leaving it behind would keep a
+                // refresh token for an account the reader has just taken off the
+                // rail, and re-adding would silently inherit it.
+                AccountCredentialStore.Remove(account.Key);
                 settings.Accounts.Remove(account);
                 settings.Save();
                 SettingsChanged?.Invoke();
@@ -687,57 +699,54 @@ internal sealed class SettingsWindow : Window
             _codexAccounts.Children.Add(row);
         }
 
-        _codexAccounts.Children.Add(AddAccountRow(settings));
-    }
-
-    private UIElement AddAccountRow(AppSettings settings)
-    {
-        var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
-
-        var label = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5), Text = "" };
-        StyleField(label);
-        label.ToolTip = Loc.Current.SettingsAccountLabelTooltip;
-
-        var token = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
-        StyleField(token);
-        token.ToolTip = Loc.Current.SettingsAccountTokenTooltip;
-
-        var accountId = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
-        StyleField(accountId);
-        accountId.ToolTip = Loc.Current.SettingsAccountIdTooltip;
-
-        var add = new Button
+        var signIn = new Button
         {
-            Content = Loc.Current.SettingsAddAccount,
+            Content = Loc.Current.SignInAdd,
             FontSize = 11.5,
             Padding = new Thickness(12, 5, 12, 5),
+            Margin = new Thickness(0, 8, 0, 0),
             HorizontalAlignment = HorizontalAlignment.Left,
             Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
             Foreground = Theme.PrimaryBrush,
             BorderBrush = Theme.Brush(Theme.Stroke),
         };
+        signIn.Click += (_, _) => SignInAnotherAccount();
+        _codexAccounts.Children.Add(signIn);
+    }
 
-        add.Click += (_, _) =>
+    /// <summary>
+    /// Runs the device-code sign-in and, on success, puts the account on the rail.
+    /// </summary>
+    /// <remarks>
+    /// There is no paste field beside this on purpose — see
+    /// <see cref="CodexSignInWindow"/>. A pasted token stops working in about ten
+    /// days, and the only way to renew one is the CLI's own refresh token.
+    /// </remarks>
+    private void SignInAnotherAccount()
+    {
+        var settings = AppSettings.Current;
+
+        var dialog = new CodexSignInWindow { Owner = this };
+        dialog.ShowDialog();
+
+        if (dialog.Result is not { } credentials) return;
+
+        // A slot generated once and never reused, so removing an account and adding
+        // another cannot inherit the first one's settings or cache.
+        var key = new AccountKey(Provider.Codex, $"codex-{Guid.NewGuid():N}"[..14]);
+
+        AccountCredentialStore.Set(key, credentials);
+
+        settings.Accounts.Add(new MonitoredAccount
         {
-            if (token.Text.Trim().Length == 0 || accountId.Text.Trim().Length == 0) return;
+            Key = key,
+            Label = dialog.Email ?? Loc.Current.SignInAccountFallback,
+            Enabled = true,
+            IsSignedIn = true,
+        });
 
-            settings.Accounts.Add(new MonitoredAccount
-            {
-                Key = new AccountKey(Provider.Codex, $"codex-{Guid.NewGuid():N}"[..14]),
-                Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : Loc.Current.SettingsDefaultAccountName,
-                Enabled = true,
-                AccessToken = token.Text.Trim(),
-                ServiceAccountId = accountId.Text.Trim(),
-            });
-            settings.Save();
-            SettingsChanged?.Invoke();
-            RefreshStatus();
-        };
-
-        panel.Children.Add(label);
-        panel.Children.Add(token);
-        panel.Children.Add(accountId);
-        panel.Children.Add(add);
-        return panel;
+        settings.Save();
+        SettingsChanged?.Invoke();
+        RefreshStatus();
     }
 }

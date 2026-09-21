@@ -218,6 +218,41 @@ public sealed class EnglishStrings : Strings
 
     public override string SettingsDefaultAccountName => "Codex account";
 
+    public override string SignInTitle => "Sign in to Codex";
+
+    public override string SignInIntro =>
+        "Open the page below and type this code. Nothing is redirected to this machine, so the sign-in can "
+        + "run alongside the Codex CLI without disturbing it.";
+
+    public override string SignInCopyCode => "Copy code";
+
+    public override string SignInOpenPage => "Open the page";
+
+    public override string SignInWaiting => "Waiting for you to approve it in the browser…";
+
+    public override string SignInSucceeded(string who) => $"Signed in as {who}.";
+
+    public override string SignInFailed(string why) => $"Sign-in failed: {why}";
+
+    public override string SignInCancel => "Cancel";
+
+    public override string SignInAdd => "Sign in to another account";
+
+    public override string SignInNone => "No extra Codex accounts yet.";
+
+    public override string SignInClose => "Close";
+
+    public override string SignInPreparing => "Asking Codex for a code…";
+
+    public override string SignInWhySignIn =>
+        "Signing in rather than pasting a token is deliberate: a Codex access token lasts about ten days, and "
+        + "the only thing that can renew a copied one is the CLI's own refresh token — which, if the service "
+        + "rotates it, signs you out of your own Codex.";
+
+    public override string SignInAccountFallback => "Codex account";
+
+    public override string RailResetPosition => "Put the rail back on its edge";
+
     public override (double Threshold, double Divisor, string Suffix)[] MoneyTiers =>
     [
         (1_000_000, 1_000_000, "M"),

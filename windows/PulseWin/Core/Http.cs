@@ -116,4 +116,95 @@ public static class Http
 
     /// <summary>The delay before attempt <paramref name="attempt"/> (0-based), in milliseconds.</summary>
     public static int RetryDelayMs(int attempt) => 600 * (attempt + 1);
+
+    /// <summary>A POST with a JSON body, answered as a string.</summary>
+    public static async Task<HttpResult?> PostJsonAsync(
+        string url,
+        string json,
+        int timeoutSeconds,
+        IReadOnlyList<(string Name, string Value)>? extraHeaders = null,
+        CancellationToken cancellationToken = default)
+    {
+        using var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+        return await SendAsync(url, content, timeoutSeconds, extraHeaders, cancellationToken);
+    }
+
+    /// <summary>A POST with an <c>application/x-www-form-urlencoded</c> body.</summary>
+    public static async Task<HttpResult?> PostFormAsync(
+        string url,
+        IEnumerable<KeyValuePair<string, string>> fields,
+        int timeoutSeconds,
+        CancellationToken cancellationToken = default)
+    {
+        var body = string.Join("&", fields.Select(f => $"{FormEncode(f.Key)}={FormEncode(f.Value)}"));
+        using var content = new StringContent(body, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+        return await SendAsync(url, content, timeoutSeconds, null, cancellationToken);
+    }
+
+    /// <summary>
+    /// Percent-encoding for a form body, which is <b>not</b> what a URL builder does.
+    /// </summary>
+    /// <remarks>
+    /// Only the RFC 3986 unreserved set survives. A general-purpose encoder leaves
+    /// <c>:</c> and <c>/</c> alone and passes a <c>+</c> through as a space, and on a
+    /// token exchange that means the server receives a different string than the one
+    /// that was signed — a failure that looks like the user's fault. Upstream was
+    /// caught by exactly this.
+    /// </remarks>
+    public static string FormEncode(string value)
+    {
+        var encoded = new System.Text.StringBuilder(value.Length * 2);
+
+        foreach (var b in System.Text.Encoding.UTF8.GetBytes(value))
+        {
+            var safe = b is >= (byte)'A' and <= (byte)'Z'
+                       or >= (byte)'a' and <= (byte)'z'
+                       or >= (byte)'0' and <= (byte)'9'
+                       or (byte)'-' or (byte)'.' or (byte)'_' or (byte)'~';
+
+            if (safe) encoded.Append((char)b);
+            else encoded.Append('%').Append(b.ToString("X2"));
+        }
+
+        return encoded.ToString();
+    }
+
+    private static async Task<HttpResult?> SendAsync(
+        string url,
+        HttpContent content,
+        int timeoutSeconds,
+        IReadOnlyList<(string Name, string Value)>? extraHeaders,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+
+        if (extraHeaders is not null)
+        {
+            foreach (var (name, value) in extraHeaders)
+            {
+                if (!string.IsNullOrEmpty(value))
+                    request.Headers.TryAddWithoutValidation(name, value);
+            }
+        }
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+
+        try
+        {
+            using var response = await Client.SendAsync(
+                request, HttpCompletionOption.ResponseContentRead, timeout.Token);
+            var body = await response.Content.ReadAsStringAsync(timeout.Token);
+            return new HttpResult(response.StatusCode, body);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
 }

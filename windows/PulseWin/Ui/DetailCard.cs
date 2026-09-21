@@ -34,7 +34,7 @@ internal sealed class DetailCard : Popup
 
         _body = new StackPanel { Width = 268 };
 
-        var (root, content) = Theme.Card(12, 13);
+        var (root, content) = Theme.Card(new CornerRadius(12), 13);
         content.Child = _body;
         Child = root;
     }

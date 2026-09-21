@@ -23,9 +23,15 @@ internal sealed class RailWindow : Window
 {
     private readonly StackPanel _rows = new();
     private readonly Grid _surface;
+    private readonly Border _background;
+    private readonly Border _content;
     private readonly DetailCard _card = new();
     private readonly Dictionary<AccountKey, RailRow> _byKey = new();
     private RailRow? _hovered;
+
+    private bool _dragging;
+    private Point _dragOrigin;
+    private Point _dragWindowOrigin;
 
     public event Action? SettingsRequested;
 
@@ -51,13 +57,27 @@ internal sealed class RailWindow : Window
 
         _rows.Margin = new Thickness(5, 8, 5, 8);
 
-        var (root, content) = Theme.Card(13, 0);
+        var (root, content) = Theme.Card(new CornerRadius(0, 13, 13, 0), 0);
         content.Child = _rows;
         root.ContextMenu = BuildMenu();
         _surface = root;
+
+        // Kept so the rounding can follow the docking edge. The two layers are the
+        // shadow and the surface — see Theme.Card for why they are separate.
+        _background = (Border)root.Children[0];
+        _content = content;
+
         Content = root;
 
         MouseRightButtonUp += (_, _) => _surface.ContextMenu.IsOpen = true;
+
+        // Dragging. On the window rather than on a grip, because the whole rail is
+        // the handle and a grip would be one more thing drawn on a surface that is
+        // deliberately only a ring and a number.
+        MouseLeftButtonDown += OnRailMouseDown;
+        MouseMove += OnRailMouseMove;
+        MouseLeftButtonUp += OnRailMouseUp;
+        MouseDoubleClick += OnRailMouseDoubleClick;
     }
 
     /// <summary>
@@ -114,6 +134,10 @@ internal sealed class RailWindow : Window
 
         menu.Items.Add(Item(Loc.Current.MenuRefreshNow, () => RefreshRequested?.Invoke()));
         menu.Items.Add(Item(Loc.Current.MenuSettings, () => SettingsRequested?.Invoke()));
+        menu.Items.Add(new Separator());
+        // There is otherwise no way back from a rail dragged half off the screen, or
+        // parked somewhere the reader has since forgotten about.
+        menu.Items.Add(Item(Loc.Current.RailResetPosition, ResetPosition));
         menu.Items.Add(new Separator());
         menu.Items.Add(Item(Loc.Current.MenuHideRail, () => HideRequested?.Invoke()));
         menu.Items.Add(Item(Loc.Current.MenuExit, () => ExitRequested?.Invoke()));
@@ -188,13 +212,14 @@ internal sealed class RailWindow : Window
     /// excludes the taskbar — the two things that otherwise have to be divided by a
     /// DPI scale and corrected for by hand, differently on every monitor.
     /// </remarks>
-    public void Dock(RailEdge edge, double offset)
+    public void Dock(RailEdge edge, double offset, Rect? bounds = null)
     {
-        var work = SystemParameters.WorkArea;
+        var work = bounds ?? SystemParameters.WorkArea;
         var horizontal = edge == RailEdge.Top;
 
         SetOrientation(horizontal);
         Resize();
+        ApplyCorners(edge);
 
         // Let the panel measure before it is positioned, or the first dock uses the
         // height of an empty rail and lands in the wrong place.
@@ -205,21 +230,172 @@ internal sealed class RailWindow : Window
 
         switch (edge)
         {
+            // Flush. A gap of a few pixels reads as a panel that happens to be near
+            // the edge rather than one attached to it, and squaring the docked side
+            // (see ApplyCorners) is what finishes the effect.
             case RailEdge.Right:
-                Left = work.Right - width - 6;
+                Left = work.Right - width;
                 Top = Clamp(work.Top + (work.Height - height) / 2 + offset, work.Top, work.Bottom - height);
                 break;
 
             case RailEdge.Left:
-                Left = work.Left + 6;
+                Left = work.Left;
                 Top = Clamp(work.Top + (work.Height - height) / 2 + offset, work.Top, work.Bottom - height);
                 break;
 
             case RailEdge.Top:
                 Left = Clamp(work.Left + (work.Width - width) / 2 + offset, work.Left, work.Right - width);
-                Top = work.Top + 6;
+                Top = work.Top;
                 break;
         }
+    }
+
+    /// <summary>Puts the rail back where the settings say, docked or free.</summary>
+    public void Redock()
+    {
+        var settings = AppSettings.Current;
+
+        if (settings.RailFree)
+        {
+            Free(settings.RailFreeLeft, settings.RailFreeTop);
+            return;
+        }
+
+        Dock(settings.Edge, settings.RailOffset);
+    }
+
+    /// <summary>Leaves the rail where it was put, rounded on every side.</summary>
+    private void Free(double left, double top)
+    {
+        _rows.Orientation = Orientation.Vertical;
+        Width = Theme.RailWidth;
+        SizeToContent = SizeToContent.Height;
+        ApplyCorners(null);
+
+        Left = left;
+        Top = top;
+    }
+
+    /// <summary>
+    /// Squares off whichever side is against the screen.
+    /// </summary>
+    /// <remarks>
+    /// Rounding all four corners and sitting the slab flush leaves two small
+    /// crescents of desktop showing through at the corners, which undoes the flush
+    /// position — the slab still reads as floating. The docked side has to be
+    /// square for it to read as attached, and that is the whole visual difference
+    /// between docked and parked.
+    /// </remarks>
+    private void ApplyCorners(RailEdge? edge)
+    {
+        var corners = Theme.DockedCorners(edge, 13);
+        _background.CornerRadius = corners;
+        _content.CornerRadius = corners;
+    }
+
+    // ------------------------------------------------------------------ dragging
+
+    private void OnRailMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Left) return;
+
+        // A drag must not also open a hover card, or the card follows the pointer
+        // across the screen while the rail is being moved.
+        _card.Hide();
+
+        _dragOrigin = e.GetPosition(this);
+        _dragWindowOrigin = new Point(Left, Top);
+        _dragging = true;
+        CaptureMouse();
+        e.Handled = true;
+    }
+
+    private void OnRailMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_dragging || e.LeftButton != MouseButtonState.Pressed) return;
+
+        var now = e.GetPosition(this);
+        Left = _dragWindowOrigin.X + (now.X - _dragOrigin.X);
+        Top = _dragWindowOrigin.Y + (now.Y - _dragOrigin.Y);
+    }
+
+    private void OnRailMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!_dragging) return;
+
+        _dragging = false;
+        ReleaseMouseCapture();
+        Settle();
+    }
+
+    /// <summary>
+    /// Decides where a dropped rail belongs: against the nearest edge if it landed
+    /// near one, otherwise exactly where it was let go.
+    /// </summary>
+    private void Settle()
+    {
+        var settings = AppSettings.Current;
+
+        // The virtual screen rather than the work area, because a drag can end on
+        // any monitor and both of its outer edges are real edges to snap to.
+        var desktop = new Rect(
+            SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+
+        var width = ActualWidth > 1 ? ActualWidth : Width;
+        var height = ActualHeight > 1 ? ActualHeight : Height;
+
+        var toLeft = Left - desktop.Left;
+        var toRight = desktop.Right - (Left + width);
+        var toTop = Top - desktop.Top;
+
+        var nearest = new[] { (Edge: RailEdge.Left, Distance: toLeft),
+                              (Edge: RailEdge.Right, Distance: toRight),
+                              (Edge: RailEdge.Top, Distance: toTop) }
+            .OrderBy(candidate => candidate.Distance)
+            .First();
+
+        if (nearest.Distance > settings.SnapDistance)
+        {
+            // Left in open desktop. Remembered, so a restart puts it back rather
+            // than hauling it to an edge the reader did not choose.
+            settings.RailFree = true;
+            settings.RailFreeLeft = Left;
+            settings.RailFreeTop = Top;
+            settings.Save();
+            Free(Left, Top);
+            return;
+        }
+
+        settings.RailFree = false;
+        settings.Edge = nearest.Edge;
+
+        // Where along the edge it landed, relative to the middle of the screen.
+        settings.RailOffset = nearest.Edge == RailEdge.Top
+            ? Left + width / 2 - (desktop.Left + desktop.Width / 2)
+            : Top + height / 2 - (desktop.Top + desktop.Height / 2);
+
+        settings.Save();
+        Dock(nearest.Edge, settings.RailOffset, desktop);
+    }
+
+    private void OnRailMouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        // A double click is the reflex for "put it back".
+        e.Handled = true;
+        _dragging = false;
+        ReleaseMouseCapture();
+        ResetPosition();
+    }
+
+    /// <summary>Puts the rail back on the edge the settings name, centred on it.</summary>
+    public void ResetPosition()
+    {
+        var settings = AppSettings.Current;
+        settings.RailFree = false;
+        settings.RailOffset = 0;
+        settings.Save();
+        Dock(settings.Edge, 0);
     }
 
     /// <summary>
@@ -272,10 +448,5 @@ internal sealed class RailWindow : Window
 
     private static double Clamp(double value, double low, double high) =>
         high < low ? low : Math.Clamp(value, low, high);
-
-    /// <summary>
-    /// Keeps the rail out of the taskbar's way when the work area changes — a
-    /// resolution change, a monitor unplugged, the taskbar moved.
-    /// </summary>
-    public void Redock() => Dock(AppSettings.Current.Edge, AppSettings.Current.RailOffset);
 }
+

@@ -218,6 +218,40 @@ public sealed class ChineseStrings : Strings
 
     public override string SettingsDefaultAccountName => "Codex 账号";
 
+    public override string SignInTitle => "登录 Codex";
+
+    public override string SignInIntro =>
+        "打开下面的页面并输入这个代码。整个流程没有任何东西回调到本机，所以可以和 Codex CLI 同时登录、"
+        + "互不干扰。";
+
+    public override string SignInCopyCode => "复制代码";
+
+    public override string SignInOpenPage => "打开授权页面";
+
+    public override string SignInWaiting => "正在等待你在浏览器里确认…";
+
+    public override string SignInSucceeded(string who) => $"已登录为 {who}。";
+
+    public override string SignInFailed(string why) => $"登录失败：{why}";
+
+    public override string SignInCancel => "取消";
+
+    public override string SignInAdd => "登录另一个账号";
+
+    public override string SignInNone => "还没有额外的 Codex 账号。";
+
+    public override string SignInClose => "关闭";
+
+    public override string SignInPreparing => "正在向 Codex 申请设备码…";
+
+    public override string SignInWhySignIn =>
+        "这里是登录而不是粘贴令牌，是有意的：Codex 的访问令牌大约只能活十天，而唯一能续期它的东西是 CLI "
+        + "自己的 refresh token——一旦服务端轮换了它，你自己的 Codex 就会被登出。";
+
+    public override string SignInAccountFallback => "Codex 账号";
+
+    public override string RailResetPosition => "把悬浮条放回贴边位置";
+
     // 中文按万 / 亿分组，英文按千 / 百万分组。同一个十万，英文写作 100k，中文写作 10万。
     public override (double Threshold, double Divisor, string Suffix)[] MoneyTiers =>
     [

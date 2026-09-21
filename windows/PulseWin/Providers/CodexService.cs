@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PulseWin.Auth;
 using PulseWin.Core;
 using PulseWin.Storage;
 
@@ -37,13 +38,37 @@ public static class CodexService
     public static async Task<ProviderUsage> FetchAsync(
         MonitoredAccount account, CancellationToken cancellationToken = default)
     {
-        var credentials = account.Key.IsPrimary
-            ? LoadBorrowedCredentials()
-            // An account PulseWin signed in to itself, read with the token it
-            // holds for it. There is no route to choose: the app server and the
-            // stored CLI login both belong to whichever account the CLI is signed
-            // in to, not this one.
-            : FromAccount(account);
+        Credentials? credentials;
+
+        if (account.Key.IsPrimary)
+        {
+            credentials = LoadBorrowedCredentials();
+        }
+        else
+        {
+            // An account this app signed in to itself. There is no route to choose:
+            // the app server and the stored CLI login both belong to whichever
+            // account the CLI is signed in to, not this one.
+            var stored = AccountCredentialStore.For(account.Key);
+            if (stored is null || !stored.IsUsable)
+                return ProviderUsage.Failed(account.Key, Unavailability.SignInRequired);
+
+            if (stored.NeedsRenewal(DateTimeOffset.Now))
+            {
+                var (renewed, _) = await CodexDeviceLogin.RenewAsync(stored, cancellationToken);
+
+                // A renewal that fails is a signed-out account, not a network error.
+                // The remedy is the same and the reader can act on it, which is why
+                // this reports SignInRequired rather than Unreachable.
+                if (renewed is null)
+                    return ProviderUsage.Failed(account.Key, Unavailability.SignInRequired);
+
+                AccountCredentialStore.Set(account.Key, renewed);
+                stored = renewed;
+            }
+
+            credentials = new Credentials(stored.AccessToken, stored.ServiceAccountId ?? "");
+        }
 
         if (credentials is null)
             return ProviderUsage.Failed(account.Key, Unavailability.SignInRequired);
@@ -90,11 +115,6 @@ public static class CodexService
 
         return Parse(root.Value, account.Key);
     }
-
-    private static Credentials? FromAccount(MonitoredAccount account) =>
-        string.IsNullOrEmpty(account.AccessToken)
-            ? null
-            : new Credentials(account.AccessToken, account.ServiceAccountId ?? "");
 
     private static Credentials? LoadBorrowedCredentials()
     {

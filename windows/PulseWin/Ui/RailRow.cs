@@ -62,13 +62,13 @@ public static class Theme
     /// gives the text back its subpixel rendering, because siblings are rendered
     /// independently.
     /// </remarks>
-    public static (Grid Root, Border Content) Card(double radius, double padding)
+    public static (Grid Root, Border Content) Card(CornerRadius radius, double padding)
     {
         var root = new Grid();
 
         var background = new Border
         {
-            CornerRadius = new CornerRadius(radius),
+            CornerRadius = radius,
             Background = SurfaceBrush,
             Effect = new DropShadowEffect
             {
@@ -82,7 +82,7 @@ public static class Theme
 
         var content = new Border
         {
-            CornerRadius = new CornerRadius(radius),
+            CornerRadius = radius,
             Background = SurfaceBrush,
             BorderBrush = Brush(Stroke),
             BorderThickness = new Thickness(1),
@@ -93,6 +93,25 @@ public static class Theme
         root.Children.Add(content);
         return (root, content);
     }
+
+    /// <summary>
+    /// The corner rounding for a slab docked to an edge.
+    /// </summary>
+    /// <remarks>
+    /// <b>The docked side is squared off.</b> Rounding all four corners and sitting
+    /// the slab flush against the screen leaves two small crescents of desktop
+    /// showing through at the corners, which reads as a floating panel that happens
+    /// to be near the edge rather than one attached to it. Squaring the side that
+    /// touches is what makes it look docked, and it is the whole visual difference.
+    /// </remarks>
+    public static CornerRadius DockedCorners(RailEdge? edge, double radius) => edge switch
+    {
+        // WPF order is top-left, top-right, bottom-right, bottom-left.
+        RailEdge.Right => new CornerRadius(radius, 0, 0, radius),
+        RailEdge.Left => new CornerRadius(0, radius, radius, 0),
+        RailEdge.Top => new CornerRadius(0, 0, radius, radius),
+        _ => new CornerRadius(radius),
+    };
 }
 
 /// <summary>

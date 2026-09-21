@@ -84,11 +84,11 @@ public sealed class AppController
         if (settings.RailVisible)
         {
             _rail.Show();
-            _rail.Dock(settings.Edge, settings.RailOffset);
+            _rail.Redock();
 
             // Dock again once the rows have been measured, or the first position
             // uses the height of an empty rail.
-            _rail.SizeChanged += (_, _) => _rail?.Dock(settings.Edge, settings.RailOffset);
+            _rail.SizeChanged += (_, _) => _rail?.Redock();
         }
     }
 
@@ -116,7 +116,7 @@ public sealed class AppController
         {
             settings.RailVisible = true;
             _rail.Show();
-            _rail.Dock(settings.Edge, settings.RailOffset);
+            _rail.Redock();
         }
 
         settings.Save();
@@ -143,7 +143,7 @@ public sealed class AppController
                 if (_rail is not null)
                 {
                     _rail.Render(_store.Snapshot());
-                    _rail.Dock(settings.Edge, settings.RailOffset);
+                    _rail.Redock();
                 }
 
                 // A service that was just switched on, or given a key, should not
@@ -225,3 +225,4 @@ public sealed class AppController
         Application.Current?.Shutdown();
     }
 }
+

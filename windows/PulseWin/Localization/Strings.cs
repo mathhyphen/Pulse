@@ -238,6 +238,40 @@ public abstract class Strings
 
     public abstract string SettingsDefaultAccountName { get; }
 
+    // ------------------------------------------------------------- codex sign-in
+
+    public abstract string SignInTitle { get; }
+
+    public abstract string SignInIntro { get; }
+
+    public abstract string SignInCopyCode { get; }
+
+    public abstract string SignInOpenPage { get; }
+
+    public abstract string SignInWaiting { get; }
+
+    public abstract string SignInSucceeded(string who);
+
+    public abstract string SignInFailed(string why);
+
+    public abstract string SignInCancel { get; }
+
+    public abstract string SignInAdd { get; }
+
+    public abstract string SignInNone { get; }
+
+    public abstract string SignInClose { get; }
+
+    public abstract string SignInPreparing { get; }
+
+    public abstract string SignInWhySignIn { get; }
+
+    public abstract string SignInAccountFallback { get; }
+
+    // ------------------------------------------------------------------ the rail
+
+    public abstract string RailResetPosition { get; }
+
     // ------------------------------------------------------------------- money
 
     /// <summary>

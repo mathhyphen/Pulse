@@ -53,6 +53,33 @@ public sealed class AppSettings
 
     public RailEdge Edge { get; set; } = RailEdge.Right;
 
+    /// <summary>
+    /// Whether the rail is parked away from every edge instead of docked to one.
+    /// </summary>
+    /// <remarks>
+    /// Dragging decides this rather than a setting: let go near an edge and it
+    /// docks there, let go in open desktop and it stays where it was put. A third
+    /// mode in Settings would be a mode nobody switches on, which is why upstream
+    /// describes the same behaviour as "dock to an edge, or float freely anywhere".
+    /// </remarks>
+    public bool RailFree { get; set; }
+
+    public double RailFreeLeft { get; set; }
+
+    public double RailFreeTop { get; set; }
+
+    /// <summary>
+    /// How close to an edge a drop has to land before it docks. In device-independent pixels.
+    /// </summary>
+    /// <remarks>
+    /// Deliberately generous. The point of an edge-docked rail is that it is docked,
+    /// so a drop that was clearly aimed at the edge should attach rather than land
+    /// a few pixels short and float — which reads as the snapping being broken
+    /// rather than as the drop having missed. Small enough that parking the rail
+    /// beside a window near the edge still works.
+    /// </remarks>
+    public double SnapDistance { get; set; } = 160;
+
     /// <summary>Vertical (or horizontal, for the top edge) offset from centre, so the rail can be moved off a notch.</summary>
     public double RailOffset { get; set; }
 

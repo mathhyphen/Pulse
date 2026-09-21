@@ -46,17 +46,15 @@ public sealed class MonitoredAccount
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// For an added account, the OAuth token PulseWin holds for it.
-    ///
-    /// Added accounts are <b>endpoint-backed and carry their own credential</b> —
-    /// the CLI login belongs to whichever account the CLI is signed in to, which
-    /// is not this one. On the primary account this is null and the borrowed file
-    /// is read instead.
+    /// For an added account, whether a sign-in is held for it.
     /// </summary>
-    public string? AccessToken { get; set; }
-
-    /// <summary>The account id the service should answer for. Sent as <c>ChatGPT-Account-Id</c>.</summary>
-    public string? ServiceAccountId { get; set; }
+    /// <remarks>
+    /// <b>The token is not here.</b> Added accounts are signed in to rather than
+    /// pasted into, so their tokens live in the encrypted account store and renew
+    /// themselves; a copy on this record would be a second, staler one. This flag
+    /// exists only so a rail row can say "signed out" without opening the store.
+    /// </remarks>
+    public bool IsSignedIn { get; set; }
 
     [JsonIgnore]
     public string DisplayLabel =>
