@@ -231,7 +231,7 @@ public static class Theme
     }
 
     /// <summary>
-    /// The rounded slab.
+    /// The rounded slab, as one layer for the rail and two for a card.
     /// </summary>
     /// <param name="opaque">
     /// True for a surface that is being <i>read</i> rather than sat on — the hover
@@ -241,22 +241,35 @@ public static class Theme
     /// </param>
     /// <remarks>
     /// <para>
-    /// <b>Two layers when solid, one when translucent.</b> A WPF <c>Effect</c> renders
-    /// its element's whole subtree into an intermediate surface first, and text drawn
-    /// through that surface loses ClearType — a 9-point figure comes out visibly soft.
-    /// So the shadow lives on a background-only sibling and the content is drawn over
-    /// it, which keeps the shadow and gives the text back its subpixel rendering.
+    /// <b>The rail is one layer, always.</b> It used to be two when solid — a
+    /// background one to cast a shadow, a content one on top — and the reason for the
+    /// split was real: a WPF <c>Effect</c> renders its element's whole subtree through
+    /// an intermediate surface, and text drawn that way loses ClearType. But the rail
+    /// is docked flush against a screen edge, where a shadow has nothing to fall on,
+    /// and its window is exactly the slab — so the only part of a clipped shadow that
+    /// could render was the grey wedge left in each rounded corner. That is what
+    /// "the corners are still grey" was. No shadow, no second layer, no wedges.
     /// </para>
     /// <para>
-    /// That sibling has to be a <i>filled</i> rounded rect, because an effect can only
-    /// cast a shadow from something. Which means it also contributes its own opacity —
-    /// and in the translucent case that is wrong twice over: the two layers stack, so
-    /// a surface meant to be 55% opaque comes out at 80%, and what shows through is
-    /// the layer underneath rather than what is behind the window. So the translucent
-    /// case gets a single layer and no shadow. A glass panel that casts a hard shadow
-    /// is not what was asked for anyway.
+    /// A card does float, and a shadow is what says so, so it keeps both layers — and
+    /// gets a margin for the shadow to fall into, because a window sized exactly to its
+    /// contents clips a shadow to nothing but those same wedges.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// How much room a card leaves around itself for its own shadow.
+    /// </summary>
+    /// <remarks>
+    /// <b>A shadow needs somewhere to fall, and a window sized exactly to its contents
+    /// gives it nowhere.</b> WPF's <c>Effect</c> draws outside the element's layout
+    /// bounds and the window clips it there, so the only part of a clipped shadow that
+    /// survives is what lands <i>inside</i> the element's own rectangle — which, on a
+    /// rounded slab, is the corner notches. The grey square corners people kept seeing
+    /// were the remains of a shadow that had nowhere to go. This margin is the room;
+    /// the blur is 18 and the depth 2.
+    /// </remarks>
+    private const double ShadowRoom = 20;
+
     public static (Grid Root, Border Content) Card(CornerRadius radius, double padding, bool opaque = false)
     {
         var root = new Grid();
@@ -280,6 +293,30 @@ public static class Theme
             return (root, glass);
         }
 
+        // **The rail gets no shadow at all.** It is docked flush against a screen edge,
+        // where there is nothing for a shadow to fall on, and its window is exactly the
+        // slab — so the only piece that could render is the grey wedge in each rounded
+        // corner. A surface that is against the edge of the screen does not need to
+        // announce that it is above it.
+        if (!opaque)
+        {
+            var flat = new Border
+            {
+                CornerRadius = radius,
+                Background = fill,
+                BorderBrush = StrokeBrush,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(padding),
+            };
+
+            root.Children.Add(flat);
+            return (root, flat);
+        }
+
+        // A card floats over the desktop and a shadow is what says so, so it gets the
+        // room to draw one.
+        root.Margin = new Thickness(ShadowRoom);
+
         var background = new Border
         {
             CornerRadius = radius,
@@ -297,7 +334,7 @@ public static class Theme
         var content = new Border
         {
             CornerRadius = radius,
-            Background = SurfaceBrush,
+            Background = fill,
             BorderBrush = StrokeBrush,
             BorderThickness = new Thickness(1),
             Padding = new Thickness(padding),

@@ -28,8 +28,12 @@ internal sealed class DetailCard : Popup
         AllowsTransparency = true;
         StaysOpen = true;
         Placement = PlacementMode.Right;
-        HorizontalOffset = 10;
-        VerticalOffset = -12;
+        // The root carries a margin for its own shadow, so the popup is that much
+        // larger than the visible card. These offsets are measured to the *card*, so
+        // they subtract it back — otherwise the card sits twenty pixels further from
+        // the rail than the number says.
+        HorizontalOffset = 10 - 20;
+        VerticalOffset = -12 - 20;
         PopupAnimation = PopupAnimation.Fade;
 
         _body = new StackPanel { Width = 268 };

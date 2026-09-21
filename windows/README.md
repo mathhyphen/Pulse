@@ -331,6 +331,39 @@ per-row sampler assumed a 55-pixel row against an actual 51, so by the fourth ro
 was reading the wrong band and "confirmed" a failure that was not there. Rendering
 the block whole is what showed both the truth and the bug underneath it.
 
+### The grey corners were a clipped shadow
+
+Reported as "the rounded corner still shows a grey square corner". Both of those were
+true, and they were the same thing.
+
+The rail's window is sized **exactly** to the slab. A WPF `Effect` draws outside its
+element's layout bounds, and the window clips it there — so the only part of a shadow
+that survives is whatever lands *inside* the element's own rectangle. On a rounded
+slab, that is precisely the corner notches. The grey wedge was the remains of a shadow
+that had nowhere to fall.
+
+Sampled over a white panel, before and after, at the same bottom-left corner:
+
+```
+before                                    after
+  449 WWWWWWWWWWGGGGGG..................     WWWWWWWWWWWWWWWWWG..................
+  450 WWWWWWWWWWGGGGGGGG................     WWWWWWWWWWWWWWWWWWWWGG.............
+  451 WWWWWWWWWWGGGGGGGGGG..............     WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW
+        └─ ten pixels of grey filling           └─ one to three pixels, which is
+           the corner                              the antialiased arc itself
+```
+
+**The rail now draws no shadow at all.** It is docked flush against a screen edge,
+where there is nothing for a shadow to fall on, and a surface that is against the edge
+of the screen does not need to announce that it is above it. That also collapses it to
+a single layer in both surface modes — the second layer only ever existed to carry the
+shadow.
+
+**The hover card keeps its shadow and gets room for it**, because a card genuinely
+floats and the shadow is what says so. `Theme.Card` returns a root with a margin for
+it, and `DetailCard` subtracts that margin back out of its placement offsets so the
+card still sits where the number says.
+
 ## Appearance
 
 **Theme** — Dark, Light, or Follow Windows (the default, read from the same registry
