@@ -21,7 +21,7 @@ namespace PulseWin.Ui;
 internal sealed class RailWindow : Window
 {
     private readonly StackPanel _rows = new();
-    private readonly Border _surface;
+    private readonly Grid _surface;
     private readonly DetailCard _card = new();
     private readonly Dictionary<AccountKey, RailRow> _byKey = new();
     private RailRow? _hovered;
@@ -50,10 +50,11 @@ internal sealed class RailWindow : Window
 
         _rows.Margin = new Thickness(5, 8, 5, 8);
 
-        _surface = Theme.Surface2(13, 0);
-        _surface.Child = _rows;
-        _surface.ContextMenu = BuildMenu();
-        Content = _surface;
+        var (root, content) = Theme.Card(13, 0);
+        content.Child = _rows;
+        root.ContextMenu = BuildMenu();
+        _surface = root;
+        Content = root;
 
         MouseRightButtonUp += (_, _) => _surface.ContextMenu.IsOpen = true;
     }

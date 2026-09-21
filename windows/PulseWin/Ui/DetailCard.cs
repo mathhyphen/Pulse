@@ -32,9 +32,9 @@ internal sealed class DetailCard : Popup
 
         _body = new StackPanel { Width = 268 };
 
-        var surface = Theme.Surface2(12, 13);
-        surface.Child = _body;
-        Child = surface;
+        var (root, content) = Theme.Card(12, 13);
+        content.Child = _body;
+        Child = root;
     }
 
     public void Show(RailRow row, UIElement anchor)

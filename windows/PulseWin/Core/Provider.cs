@@ -84,6 +84,32 @@ public static class ProviderCatalog
         _ => provider.ToString(),
     };
 
+    /// <summary>
+    /// The mark drawn inside the ring.
+    /// </summary>
+    /// <remarks>
+    /// Pulse puts each product's own brand glyph in the centre of its ring, which
+    /// is what makes a rail of five rings readable at a glance. Those marks are
+    /// upstream's bundled assets and are not redistributed here, so a monogram
+    /// stands in for them. It is doing real work rather than decorating: a ring at
+    /// 3% is a hairline arc, and without something in the middle it reads as an
+    /// empty circle that failed to draw.
+    ///
+    /// Case distinguishes the two storefronts — <c>Z</c> is the mainland plan and
+    /// <c>z</c> the international one — because they are separate accounts whose
+    /// keys are refused by each other, and telling them apart is the whole reason
+    /// there are two rows.
+    /// </remarks>
+    public static string Glyph(this Provider provider) => provider switch
+    {
+        Provider.Codex => "C",
+        Provider.OpenCodeGo => "O",
+        Provider.Zhipu => "Z",
+        Provider.Zai => "z",
+        Provider.DeepSeek => "D",
+        _ => "?",
+    };
+
     /// <summary>Whether the user pastes a key, rather than a login another tool already stored.</summary>
     public static bool UsesApiKey(this Provider provider) => provider switch
     {

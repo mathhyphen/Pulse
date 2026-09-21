@@ -37,6 +37,15 @@ public sealed class RingControl : FrameworkElement
 
     public Color Accent { get; set; } = Color.FromRgb(0x8A, 0x8A, 0x8E);
 
+    /// <summary>
+    /// The mark drawn in the middle of the ring.
+    ///
+    /// A rail of rings with nothing in them cannot be read: at a low value the arc
+    /// is a hairline, and an empty circle is indistinguishable from one that failed
+    /// to draw. The mark is what says which account a ring belongs to.
+    /// </summary>
+    public string Glyph { get; set; } = "";
+
     public double RingThickness { get; set; } = 3.5;
 
     public double ClockThickness { get; set; } = 1.5;
@@ -79,22 +88,60 @@ public sealed class RingControl : FrameworkElement
         // The reading. Clamped for geometry only; the number shown elsewhere keeps
         // whatever the provider said, so a spend limit at 130% still displays 130%.
         var fraction = Math.Clamp(UsedFraction, 0, 1);
-        if (fraction <= 0) return;
-
-        var colour = IsExhausted ? ExhaustedColour : Ramp(UsedFraction);
-        var pen = new Pen(new SolidColorBrush(HasReading ? colour : Dim(colour)), RingThickness)
+        if (fraction > 0)
         {
-            StartLineCap = PenLineCap.Round,
-            EndLineCap = PenLineCap.Round,
-        };
-        pen.Freeze();
+            var colour = IsExhausted ? ExhaustedColour : Ramp(UsedFraction);
+            var pen = new Pen(new SolidColorBrush(HasReading ? colour : Dim(colour)), RingThickness)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+            };
+            pen.Freeze();
 
-        // A full ring drawn as a 360-degree arc degenerates into a point and
-        // vanishes. At (or past) the limit, a plain circle is what is wanted.
-        if (fraction >= 0.9999)
-            dc.DrawEllipse(null, pen, centre, radius, radius);
-        else
-            dc.DrawGeometry(null, pen, Arc(centre, radius, 0, fraction * 360));
+            // A full ring drawn as a 360-degree arc degenerates into a point and
+            // vanishes. At (or past) the limit, a plain circle is what is wanted.
+            if (fraction >= 0.9999)
+                dc.DrawEllipse(null, pen, centre, radius, radius);
+            else
+                dc.DrawGeometry(null, pen, Arc(centre, radius, 0, fraction * 360));
+        }
+
+        DrawGlyph(dc, centre);
+    }
+
+    /// <summary>
+    /// The provider's mark, centred.
+    /// </summary>
+    /// <remarks>
+    /// Drawn after the arc, and in the accent colour rather than the ring's value
+    /// colour: the arc is the reading and should be the thing that changes, while
+    /// the mark is the identity and should not. The two are deliberately different
+    /// colours so a mostly-empty ring still says which account it is.
+    /// </remarks>
+    private void DrawGlyph(DrawingContext dc, Point centre)
+    {
+        if (string.IsNullOrEmpty(Glyph)) return;
+
+        var dpi = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        var typeface = new Typeface(
+            new FontFamily("Segoe UI Variable Display, Segoe UI"),
+            FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
+
+        var size = Math.Max(8, Math.Min(ActualWidth, ActualHeight) * 0.40);
+        var brush = new SolidColorBrush(Accent) { Opacity = HasReading ? 0.95 : 0.40 };
+        brush.Freeze();
+
+        // `TextFormattingMode.Ideal` keeps the glyph's shape at this size; the
+        // display mode would snap stems to whole pixels and muddy a letter that is
+        // only a dozen pixels tall.
+        var text = new FormattedText(
+            Glyph, System.Globalization.CultureInfo.InvariantCulture,
+            FlowDirection.LeftToRight, typeface, size, brush, dpi)
+        {
+            TextAlignment = TextAlignment.Center,
+        };
+
+        dc.DrawText(text, new Point(centre.X, centre.Y - text.Height / 2));
     }
 
     /// <summary>

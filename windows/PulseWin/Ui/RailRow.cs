@@ -38,23 +38,49 @@ public static class Theme
 
     public static FontFamily Font { get; } = new("Segoe UI Variable Display, Segoe UI");
 
-    /// <summary>The rounded dark slab both surfaces are cut from.</summary>
-    public static Border Surface2(double radius, double padding) => new()
+    /// <summary>
+    /// A rounded dark slab with a drop shadow, as <b>two layers</b>.
+    /// </summary>
+    /// <remarks>
+    /// The split is not decoration. A WPF <c>Effect</c> renders its element's
+    /// whole subtree into an intermediate surface first, and text drawn through
+    /// that surface loses ClearType — a 9-point figure comes out visibly soft, and
+    /// the first build of this rail shipped exactly that. Putting the shadow on a
+    /// background-only sibling and the content on top of it keeps the shadow and
+    /// gives the text back its subpixel rendering, because siblings are rendered
+    /// independently.
+    /// </remarks>
+    public static (Grid Root, Border Content) Card(double radius, double padding)
     {
-        Background = SurfaceBrush,
-        BorderBrush = Brush(Stroke),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(radius),
-        Padding = new Thickness(padding),
-        Effect = new DropShadowEffect
+        var root = new Grid();
+
+        var background = new Border
         {
-            Color = Colors.Black,
-            BlurRadius = 18,
-            ShadowDepth = 2,
-            Opacity = 0.5,
-            Direction = 270,
-        },
-    };
+            CornerRadius = new CornerRadius(radius),
+            Background = SurfaceBrush,
+            Effect = new DropShadowEffect
+            {
+                Color = Colors.Black,
+                BlurRadius = 18,
+                ShadowDepth = 2,
+                Opacity = 0.5,
+                Direction = 270,
+            },
+        };
+
+        var content = new Border
+        {
+            CornerRadius = new CornerRadius(radius),
+            Background = SurfaceBrush,
+            BorderBrush = Brush(Stroke),
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(padding),
+        };
+
+        root.Children.Add(background);
+        root.Children.Add(content);
+        return (root, content);
+    }
 }
 
 /// <summary>
@@ -89,18 +115,26 @@ internal sealed class RailRow : Grid
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Top,
             Accent = AccentColour(account.Key.Provider),
+            Glyph = account.Key.Provider.Glyph(),
         };
 
         _figure = new TextBlock
         {
             FontFamily = Theme.Font,
-            FontSize = 9.5,
+            FontSize = 10,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Bottom,
             TextAlignment = TextAlignment.Center,
             Margin = new Thickness(0, 0, 0, 1),
             Foreground = Theme.PrimaryBrush,
         };
+
+        // An attached property, so it cannot go in the initialiser above. Display
+        // mode snaps stems to whole pixels, which is what makes a three-character
+        // figure legible at this size; the ring's glyph wants the opposite and asks
+        // for Ideal by drawing through FormattedText instead.
+        TextOptions.SetTextFormattingMode(_figure, TextFormattingMode.Display);
+        TextOptions.SetTextRenderingMode(_figure, TextRenderingMode.ClearType);
 
         _hit = new Border
         {
