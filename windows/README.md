@@ -166,6 +166,57 @@ monitor.
 taskbar but not out of Alt-Tab, and an always-on-top strip in the window switcher
 is a window, not a monitor.
 
+## Localisation
+
+English and Simplified Chinese, chosen at the top of Settings. The default is
+**Follow Windows**, which reads `CurrentUICulture` — so a Chinese Windows opens in
+Chinese without anybody finding the row, and any other culture gets English rather
+than an empty interface.
+
+The strings live in `Localization/` as an **abstract class with one implementation
+per language**, not a keyed lookup. That is the whole point: a dictionary falls back
+silently when a key is missing or misspelled, so the symptom of an incomplete
+translation is one stray English word in a corner nobody looks at. With abstract
+members the compiler refuses to build a language that has not answered every
+question — adding a string to the interface is a build error until both languages
+have it.
+
+**Product names are not translated** — Codex, OpenCode Go, Zhipu, z.ai, DeepSeek
+are what those products are called in every language, which is upstream's rule for
+its `displayName` too. A window's `Scope` is a model name and is likewise left
+alone.
+
+Two things follow the language rather than a preference:
+
+- **Money grouping.** English groups by thousands, so a hundred thousand reads
+  `100k`; Chinese groups by ten thousands, so the same figure reads `10万`. Verified
+  by `--selftest`, which prints both: `¥12.3k / ¥250M` against `¥1.2万 / ¥2.5亿`.
+- **The CJK font.** The face stack names `Microsoft YaHei UI` explicitly rather than
+  trusting WPF's per-run fallback, because this app draws text both through
+  `TextBlock` and straight into `FormattedText`, and fallback is resolved separately
+  for each.
+
+A missing CJK face does not throw — WPF draws a hollow "tofu" box that looks like a
+rendered character until you read it. So `--selftest` renders one and checks for ink
+in the **middle** of the glyph box: a tofu box is hollow, and 中 is not. It reports
+`OK — 225 ink pixels inside the box, so a real glyph was drawn`.
+
+The `--selftest` and `--fixtures` reports are deliberately left in English. They are
+a diagnostic for whoever is fixing a provider, not part of the interface.
+
+## Size
+
+Measured on this build:
+
+| Publish | Size | Files | Notes |
+|---|---:|---:|---|
+| Framework-dependent | **0.3 MB** | 5 | needs the .NET 8 desktop runtime |
+| Self-contained, single file | **62.9 MB** | 2 | runs on a machine with nothing installed |
+
+The app's own code is only ~307 KB of that (a 159 KB `PulseWin.dll` and a 148 KB
+apphost); the 62.9 MB is the .NET runtime and WPF bundled whole. Source is 31 files
+and about 5,300 lines.
+
 ## Build and run
 
 Needs the **.NET 8 SDK**. No administrator rights:
@@ -206,8 +257,9 @@ Providers/     One service per route — the ported part
 Storage/       DPAPI credential store, settings, the DeepSeek baseline
 Services/      UsageStore: the refresh loop and the state behind the rail
 Ui/            RailWindow, RailRow, RingControl, DetailCard, SettingsWindow, TrayIcon
-FixtureCheck   The 42 assertions against captured replies
-SelfTest       Credential discovery and a live fetch of every provider
+Localization/  Strings, with one implementation per language
+FixtureCheck   The 50 assertions against captured replies
+SelfTest       Credential discovery, a live fetch of every provider, the CJK check
 ```
 
 The interface is built in code rather than from XAML. A tray-resident borderless

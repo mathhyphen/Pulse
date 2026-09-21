@@ -13,6 +13,15 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+
+    <!--
+      WFAC010 asks for the DPI mode to be set through ApplicationHighDpiMode rather
+      than the manifest. That advice is for a WinForms-first app; this one is WPF,
+      where the manifest declaration is the mechanism that actually applies, and
+      WinForms is along only for its tray icon. Declaring it twice would be worse
+      than the warning.
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <Version>0.1.0</Version>
     <Product>PulseWin</Product>
     <Description>Windows port of Pulse — AI coding allowance monitor</Description>

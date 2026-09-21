@@ -129,15 +129,20 @@ public static class ProviderCatalog
         provider == Provider.Codex;
 
     /// <summary>Where the key comes from, stated in Settings above the field.</summary>
-    public static string CredentialNote(this Provider provider) => provider switch
+    public static string CredentialNote(this Provider provider)
     {
-        Provider.Codex => @"Borrows the login Codex saved at %USERPROFILE%\.codex\auth.json.",
-        Provider.OpenCodeGo => @"Reads %USERPROFILE%\.local\share\opencode\auth.json, or a key you paste here.",
-        Provider.Zhipu => @"Mainland storefront (open.bigmodel.cn). Paste a key, or it reads a saved GLM key file.",
-        Provider.Zai => @"International storefront (api.z.ai). A key from the mainland service is refused here.",
-        Provider.DeepSeek => @"Paste a key from platform.deepseek.com. Reports a prepaid balance — there is no allowance.",
-        _ => "",
-    };
+        var strings = Localization.Loc.Current;
+
+        return provider switch
+        {
+            Provider.Codex => strings.CredentialCodex,
+            Provider.OpenCodeGo => strings.CredentialOpenCodeGo,
+            Provider.Zhipu => strings.CredentialZhipu,
+            Provider.Zai => strings.CredentialZai,
+            Provider.DeepSeek => strings.CredentialDeepSeek,
+            _ => "",
+        };
+    }
 
     public static IReadOnlyList<Provider> All { get; } = new[]
     {

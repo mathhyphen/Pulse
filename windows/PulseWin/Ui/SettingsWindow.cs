@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using PulseWin.Core;
+using PulseWin.Localization;
 using PulseWin.Providers;
 using PulseWin.Services;
 using PulseWin.Storage;
@@ -42,7 +43,6 @@ internal sealed class SettingsWindow : Window
     {
         _store = store;
 
-        Title = "PulseWin settings";
         Width = 620;
         Height = 720;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
@@ -50,27 +50,46 @@ internal sealed class SettingsWindow : Window
         FontFamily = Theme.Font;
         Foreground = Theme.PrimaryBrush;
 
+        Load();
+        Rebuild();
+    }
+
+    /// <summary>
+    /// Draws the whole window from the current language.
+    /// </summary>
+    /// <remarks>
+    /// Every string here is baked in at construction, so changing the language has
+    /// to redraw rather than relabel. Rebuilding wholesale is the honest version of
+    /// that: the alternative is a second code path that updates existing elements,
+    /// which would drift from this one and be wrong in the half nobody looks at.
+    /// </remarks>
+    private void Rebuild()
+    {
+        _status.Clear();
+        _keyFields.Clear();
+
+        Title = Loc.Current.SettingsTitle;
+
         var panel = new StackPanel { Margin = new Thickness(22) };
 
-        panel.Children.Add(Heading("Services", 17));
-        panel.Children.Add(Caption(
-            "A switched-off service is not checked at all — no credentials are read and no request is made."));
+        // Language first, because it changes everything under it.
+        panel.Children.Add(Heading(Loc.Current.SettingsLanguage, 15));
+        panel.Children.Add(LanguageBlock());
+
+        panel.Children.Add(Heading(Loc.Current.SettingsServices, 17));
+        panel.Children.Add(Caption(Loc.Current.SettingsServicesCaption));
         foreach (var provider in ProviderCatalog.All)
             panel.Children.Add(ProviderBlock(provider));
 
-        panel.Children.Add(Heading("DeepSeek", 15));
-        panel.Children.Add(Caption(
-            "DeepSeek reports a balance and no allowance, so the ring needs a denominator from somewhere. "
-            + "Nothing here is a guess about DeepSeek's pricing."));
+        panel.Children.Add(Heading(Loc.Current.SettingsDeepSeek, 15));
+        panel.Children.Add(Caption(Loc.Current.SettingsDeepSeekCaption));
         panel.Children.Add(DeepSeekBlock());
 
-        panel.Children.Add(Heading("The rail", 15));
+        panel.Children.Add(Heading(Loc.Current.SettingsRail, 15));
         panel.Children.Add(RailBlock());
 
-        panel.Children.Add(Heading("Codex accounts", 15));
-        panel.Children.Add(Caption(
-            "The ring above reads the login Codex saved on this machine. Add an account here to monitor a "
-            + "second subscription alongside it — each one carries its own token."));
+        panel.Children.Add(Heading(Loc.Current.SettingsCodexAccounts, 15));
+        panel.Children.Add(Caption(Loc.Current.SettingsCodexAccountsCaption));
         panel.Children.Add(_codexAccounts);
 
         Content = new ScrollViewer
@@ -79,8 +98,61 @@ internal sealed class SettingsWindow : Window
             Content = panel,
         };
 
-        Load();
         RefreshStatus();
+    }
+
+    /// <summary>
+    /// The language picker.
+    /// </summary>
+    /// <remarks>
+    /// <c>Follow Windows</c> is the default and reads <c>CurrentUICulture</c>, so a
+    /// Chinese Windows opens in Chinese without anybody finding this row.
+    /// </remarks>
+    private UIElement LanguageBlock()
+    {
+        var block = Block();
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+
+        var picker = new ComboBox
+        {
+            FontSize = 12,
+            Width = 190,
+            ItemsSource = new[]
+            {
+                Loc.Current.SettingsLanguageAuto,
+                "English",
+                "简体中文",
+            },
+            SelectedIndex = AppSettings.Current.Language switch
+            {
+                UiLanguage.English => 1,
+                UiLanguage.Chinese => 2,
+                _ => 0,
+            },
+        };
+
+        picker.SelectionChanged += (_, _) =>
+        {
+            var chosen = picker.SelectedIndex switch
+            {
+                1 => UiLanguage.English,
+                2 => UiLanguage.Chinese,
+                _ => UiLanguage.Auto,
+            };
+
+            if (chosen == AppSettings.Current.Language) return;
+
+            AppSettings.Current.Language = chosen;
+            AppSettings.Current.Save();
+            Loc.Setting = chosen;
+
+            Rebuild();
+            SettingsChanged?.Invoke();
+        };
+
+        row.Children.Add(picker);
+        block.Child = row;
+        return block;
     }
 
     // ------------------------------------------------------------- construction
@@ -190,8 +262,8 @@ internal sealed class SettingsWindow : Window
             // one convenience not worth having.
             PasswordChar = '•',
             ToolTip = CredentialStore.Has(provider)
-                ? "A key is already stored. Typing here replaces it."
-                : "Paste the key here.",
+                ? Loc.Current.SettingsKeyStored
+                : Loc.Current.SettingsKeyPaste,
         };
         _keyFields[provider] = field;
 
@@ -217,7 +289,7 @@ internal sealed class SettingsWindow : Window
 
         var clear = new Button
         {
-            Content = "Clear",
+            Content = Loc.Current.SettingsClear,
             FontSize = 11,
             Padding = new Thickness(10, 4, 10, 4),
             Margin = new Thickness(7, 0, 0, 0),
@@ -244,9 +316,9 @@ internal sealed class SettingsWindow : Window
 
         string[] labels =
         [
-            "Since top-up — measure against the highest balance this app has watched",
-            "Balance only — draw the money, with no percentage at all",
-            "My budget — measure against a figure I type",
+            Loc.Current.SettingsBasisSinceTopUp,
+            Loc.Current.SettingsBasisBalanceOnly,
+            Loc.Current.SettingsBasisBudget,
         ];
         RadioButton[] buttons = [_basisTopUp, _basisBalanceOnly, _basisBudget];
 
@@ -268,7 +340,7 @@ internal sealed class SettingsWindow : Window
 
         var budgetLabel = new TextBlock
         {
-            Text = "Budget",
+            Text = Loc.Current.SettingsBudget,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 9, 0),
@@ -283,7 +355,7 @@ internal sealed class SettingsWindow : Window
 
         var currencyLabel = new TextBlock
         {
-            Text = "Currency",
+            Text = Loc.Current.SettingsCurrency,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 9, 0),
@@ -293,7 +365,7 @@ internal sealed class SettingsWindow : Window
         row.Children.Add(currencyLabel);
 
         StyleField(_currency);
-        _currency.ToolTip = "Blank follows the first purse with money in it. An account can hold both CNY and USD.";
+        _currency.ToolTip = Loc.Current.SettingsCurrencyTooltip;
         Grid.SetColumn(_currency, 3);
         row.Children.Add(_currency);
 
@@ -345,7 +417,7 @@ internal sealed class SettingsWindow : Window
 
         var edgeLabel = new TextBlock
         {
-            Text = "Edge",
+            Text = Loc.Current.SettingsEdge,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 9, 0),
@@ -354,7 +426,12 @@ internal sealed class SettingsWindow : Window
         Grid.SetColumn(edgeLabel, 0);
         row.Children.Add(edgeLabel);
 
-        _edge.ItemsSource = new[] { "Right", "Left", "Top" };
+        _edge.ItemsSource = new[]
+        {
+            Loc.Current.SettingsEdgeRight,
+            Loc.Current.SettingsEdgeLeft,
+            Loc.Current.SettingsEdgeTop,
+        };
         _edge.FontSize = 12;
         _edge.Margin = new Thickness(0, 0, 16, 0);
         _edge.SelectionChanged += (_, _) => CommitRail();
@@ -363,7 +440,7 @@ internal sealed class SettingsWindow : Window
 
         var refreshLabel = new TextBlock
         {
-            Text = "Every",
+            Text = Loc.Current.SettingsEvery,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 9, 0),
@@ -373,14 +450,14 @@ internal sealed class SettingsWindow : Window
         row.Children.Add(refreshLabel);
 
         StyleField(_refresh);
-        _refresh.ToolTip = "Minutes between checks, 1 to 60.";
+        _refresh.ToolTip = Loc.Current.SettingsMinutesTooltip;
         _refresh.LostFocus += (_, _) => CommitRail();
         Grid.SetColumn(_refresh, 3);
         row.Children.Add(_refresh);
 
         var offsetLabel = new TextBlock
         {
-            Text = "Offset",
+            Text = Loc.Current.SettingsOffset,
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(16, 0, 9, 0),
@@ -390,7 +467,7 @@ internal sealed class SettingsWindow : Window
         row.Children.Add(offsetLabel);
 
         StyleField(_offset);
-        _offset.ToolTip = "Slides the rail along its edge, in pixels. Negative moves it up or left.";
+        _offset.ToolTip = Loc.Current.SettingsOffsetTooltip;
         _offset.LostFocus += (_, _) => CommitRail();
         Grid.SetColumn(_offset, 5);
         row.Children.Add(_offset);
@@ -404,7 +481,7 @@ internal sealed class SettingsWindow : Window
         // ring reads as "almost nothing left" whichever way it was counted.
         var countdown = new CheckBox
         {
-            Content = "Count down instead of up — show what is left, figure and ring together",
+            Content = Loc.Current.SettingsCountdown,
             IsChecked = AppSettings.Current.ShowsRemaining,
             FontSize = 12,
             Margin = new Thickness(0, 12, 0, 0),
@@ -416,7 +493,7 @@ internal sealed class SettingsWindow : Window
 
         stack.Children.Add(new TextBlock
         {
-            Text = "The colour always follows what is gone, so a sliver of quota left stays a small red arc.",
+            Text = Loc.Current.SettingsCountdownNote,
             FontSize = 11,
             TextWrapping = TextWrapping.Wrap,
             Margin = new Thickness(24, 3, 0, 0),
@@ -510,9 +587,11 @@ internal sealed class SettingsWindow : Window
             if (!_status.TryGetValue(provider, out var text)) continue;
 
             var settings = AppSettings.Current;
+            var strings = Loc.Current;
+
             if (!settings.Enabled.Contains(provider))
             {
-                text.Text = "off";
+                text.Text = strings.SettingsStatusOff;
                 text.Foreground = Theme.SecondaryBrush;
                 continue;
             }
@@ -524,13 +603,12 @@ internal sealed class SettingsWindow : Window
             {
                 var figure = reading.Fullest is not null
                     ? reading.HeadlineText(settings.ShowsRemaining)
-                    : reading.RailMoney ?? "read";
+                    : reading.RailMoney ?? strings.SettingsStatusRead;
 
-                var direction = settings.ShowsRemaining ? "left" : "used";
+                var direction = settings.ShowsRemaining ? strings.DirectionLeft : strings.DirectionUsed;
+                var said = $"{figure} {direction}";
 
-                text.Text = state.LastFailure is null
-                    ? $"{figure} {direction}"
-                    : $"{figure} {direction} (stale)";
+                text.Text = state.LastFailure is null ? said : strings.SettingsStatusStale(said);
                 text.Foreground = state.LastFailure is null ? Theme.PrimaryBrush : Theme.WarningBrush;
             }
             else if (state?.LastFailure is { } failure)
@@ -540,7 +618,7 @@ internal sealed class SettingsWindow : Window
             }
             else
             {
-                text.Text = "not checked yet";
+                text.Text = strings.SettingsStatusNotChecked;
                 text.Foreground = Theme.SecondaryBrush;
             }
 
@@ -550,7 +628,7 @@ internal sealed class SettingsWindow : Window
                 && !(provider == Provider.OpenCodeGo && OpenCodeGoService.StoredKey() is not null)
                 && !(provider == Provider.Zhipu && ZhipuService.StoredKey(provider) is not null))
             {
-                text.Text = "needs a key";
+                text.Text = strings.SettingsStatusNeedsKey;
                 text.Foreground = Theme.WarningBrush;
             }
         }
@@ -565,7 +643,7 @@ internal sealed class SettingsWindow : Window
 
         if (!settings.Enabled.Contains(Provider.Codex))
         {
-            _codexAccounts.Children.Add(Caption("Switch Codex on to add accounts."));
+            _codexAccounts.Children.Add(Caption(Loc.Current.SettingsSwitchCodexOn));
             return;
         }
 
@@ -589,7 +667,7 @@ internal sealed class SettingsWindow : Window
 
             var remove = new Button
             {
-                Content = "Remove",
+                Content = Loc.Current.SettingsRemove,
                 FontSize = 11,
                 Padding = new Thickness(10, 4, 10, 4),
                 Background = Theme.Brush(Color.FromRgb(0x2A, 0x2A, 0x30)),
@@ -618,21 +696,19 @@ internal sealed class SettingsWindow : Window
 
         var label = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5), Text = "" };
         StyleField(label);
-        label.ToolTip = "What to call this account on the rail.";
+        label.ToolTip = Loc.Current.SettingsAccountLabelTooltip;
 
         var token = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
         StyleField(token);
-        token.ToolTip = "The account's Codex access token. Sent as the bearer for this ring only.";
+        token.ToolTip = Loc.Current.SettingsAccountTokenTooltip;
 
         var accountId = new TextBox { FontSize = 12, Margin = new Thickness(0, 0, 0, 5) };
         StyleField(accountId);
-        accountId.ToolTip =
-            "The ChatGPT account id this token belongs to. Sent as ChatGPT-Account-Id, and required for a "
-            + "second account: without it the service may answer for whichever login it likes.";
+        accountId.ToolTip = Loc.Current.SettingsAccountIdTooltip;
 
         var add = new Button
         {
-            Content = "Add account",
+            Content = Loc.Current.SettingsAddAccount,
             FontSize = 11.5,
             Padding = new Thickness(12, 5, 12, 5),
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -648,7 +724,7 @@ internal sealed class SettingsWindow : Window
             settings.Accounts.Add(new MonitoredAccount
             {
                 Key = new AccountKey(Provider.Codex, $"codex-{Guid.NewGuid():N}"[..14]),
-                Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : "Codex account",
+                Label = label.Text.Trim().Length > 0 ? label.Text.Trim() : Loc.Current.SettingsDefaultAccountName,
                 Enabled = true,
                 AccessToken = token.Text.Trim(),
                 ServiceAccountId = accountId.Text.Trim(),

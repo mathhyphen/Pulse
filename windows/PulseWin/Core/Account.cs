@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
+using PulseWin.Localization;
 
 namespace PulseWin.Core;
 
@@ -92,10 +93,15 @@ public static class MoneyFormat
         var value = Math.Abs(amount);
         var sign = amount < 0 ? "-" : "";
 
-        if (value >= 1_000_000)
-            return $"{sign}{symbol}{Truncate(value / 1_000_000)}M";
-        if (value >= 1_000)
-            return $"{sign}{symbol}{Truncate(value / 1_000)}k";
+        // The tiers come from the language, not from taste: English groups by
+        // thousands, so a hundred thousand reads "100k"; Chinese groups by ten
+        // thousands, so the same figure reads "10万".
+        foreach (var (threshold, divisor, suffix) in Loc.Current.MoneyTiers)
+        {
+            if (value >= threshold)
+                return $"{sign}{symbol}{Truncate(value / divisor)}{suffix}";
+        }
+
         if (value >= 100)
             return $"{sign}{symbol}{Math.Truncate(value).ToString(CultureInfo.InvariantCulture)}";
         if (value == Math.Truncate(value))

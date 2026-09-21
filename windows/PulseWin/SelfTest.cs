@@ -1,8 +1,12 @@
 using System.Text;
+using System.Windows;
+using System.Windows.Media;
 using PulseWin.Core;
+using PulseWin.Localization;
 using PulseWin.Providers;
 using PulseWin.Services;
 using PulseWin.Storage;
+using PulseWin.Ui;
 
 namespace PulseWin;
 
@@ -74,6 +78,10 @@ public static class SelfTest
         CredentialStore.Load();
         var settings = AppSettings.Current;
 
+        // The report is drawn in whatever language the app would use, so the
+        // resolved strings below are the ones a reader would actually see.
+        Loc.Initialise(settings.Language);
+
         report.AppendLine();
         report.AppendLine("CREDENTIAL DISCOVERY (what is readable without asking the user)");
         report.AppendLine($"  Codex auth file  {CodexService.AuthFile}  exists={File.Exists(CodexService.AuthFile)}");
@@ -109,6 +117,9 @@ public static class SelfTest
         report.AppendLine();
         var (passed, failed, fixtureReport) = FixtureCheck.Run();
         report.Append(fixtureReport);
+
+        report.AppendLine();
+        DescribeLocalisation(report);
 
         report.AppendLine();
         report.AppendLine(new string('-', 78));
@@ -149,6 +160,114 @@ public static class SelfTest
             Provider.DeepSeek => DeepSeekService.FetchAsync(account.Key, null),
             _ => Task.FromResult(ProviderUsage.Failed(account.Key, Unavailability.NoLimitsReported)),
         };
+
+    /// <summary>
+    /// Reports the localisation, and proves the Chinese is real glyphs.
+    /// </summary>
+    /// <remarks>
+    /// A missing CJK face does not fail — WPF draws a "tofu" box instead, which
+    /// looks like a rendered character until you read it, and there is no exception
+    /// to catch. So the check renders one character and looks at whether there is
+    /// ink in the <i>middle</i> of its box: a tofu box is hollow, and 中 is not.
+    /// </remarks>
+    private static void DescribeLocalisation(StringBuilder report)
+    {
+        report.AppendLine(new string('-', 78));
+        report.AppendLine("LOCALISATION");
+        report.AppendLine();
+
+        var chosen = Loc.Setting;
+        report.AppendLine($"  setting = {chosen}, resolved to {(ReferenceEquals(Loc.Current, Loc.Zh) ? "Chinese" : "English")}");
+        report.AppendLine($"  Windows UI culture = {System.Globalization.CultureInfo.CurrentUICulture.Name}");
+        report.AppendLine();
+
+        (string What, string En, string Zh)[] samples =
+        [
+            ("settings title", Loc.En.SettingsTitle, Loc.Zh.SettingsTitle),
+            ("5-hour window", Loc.En.WindowFiveHour, Loc.Zh.WindowFiveHour),
+            ("weekly window", Loc.En.WindowWeekly, Loc.Zh.WindowWeekly),
+            ("left suffix", Loc.En.CardSuffixLeft("97%"), Loc.Zh.CardSuffixLeft("97%")),
+            ("refused key", Loc.En.UnavailableApiKeyRefused, Loc.Zh.UnavailableApiKeyRefused),
+            ("resets in", Loc.En.CardResetsIn("3h 20m"), Loc.Zh.CardResetsIn("3h 20m")),
+            ("elapsed", Loc.En.CardWindowElapsed(7), Loc.Zh.CardWindowElapsed(7)),
+        ];
+
+        report.AppendLine($"  {"",-16}{"English",-44}Chinese");
+        foreach (var (what, en, zh) in samples)
+            report.AppendLine($"  {what,-16}{en,-44}{zh}");
+
+        // Money grouping differs by language rather than by taste.
+        report.AppendLine();
+        var wasSet = Loc.Setting;
+        Loc.Setting = UiLanguage.English;
+        var moneyEn = $"{MoneyFormat.RailText(12345, "CNY")} / {MoneyFormat.RailText(250_000_000, "CNY")}";
+        Loc.Setting = UiLanguage.Chinese;
+        var moneyZh = $"{MoneyFormat.RailText(12345, "CNY")} / {MoneyFormat.RailText(250_000_000, "CNY")}";
+        Loc.Setting = wasSet;
+        report.AppendLine($"  money  12345 and 2.5e8   English: {moneyEn}");
+        report.AppendLine($"                          Chinese: {moneyZh}");
+        report.AppendLine();
+
+        var (total, interior, verdict) = FontCheck();
+        report.AppendLine($"  CJK glyph check: '中' rendered with {Theme.Font}");
+        report.AppendLine($"    ink pixels = {total}, of which in the middle of the box = {interior}");
+        report.AppendLine($"    {verdict}");
+        report.AppendLine();
+    }
+
+    /// <summary>
+    /// Draws one Chinese character and reports whether the result is a glyph or a
+    /// missing-glyph box.
+    /// </summary>
+    private static (int Total, int Interior, string Verdict) FontCheck()
+    {
+        const int size = 64;
+
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            var typeface = new Typeface(
+                Theme.Font, FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
+
+            var text = new FormattedText(
+                "中", System.Globalization.CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, typeface, 44,
+                System.Windows.Media.Brushes.White, 1.0);
+
+            dc.DrawText(text, new Point(
+                (size - text.Width) / 2, (size - text.Height) / 2));
+        }
+
+        var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(
+            size, size, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+
+        var stride = size * 4;
+        var pixels = new byte[size * stride];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        var total = 0;
+        var interior = 0;
+        const int margin = (int)(size * 0.32);
+
+        for (var y = 0; y < size; y++)
+        {
+            for (var x = 0; x < size; x++)
+            {
+                if (pixels[y * stride + x * 4 + 3] <= 60) continue;
+                total++;
+                if (x > margin && x < size - margin && y > margin && y < size - margin) interior++;
+            }
+        }
+
+        var verdict = total == 0
+            ? "FAIL — nothing was drawn at all"
+            : interior == 0
+                ? "FAIL — hollow box: the font stack has no CJK face, so Windows drew a missing-glyph box"
+                : $"OK — {interior} ink pixels inside the box, so a real glyph was drawn";
+
+        return (total, interior, verdict);
+    }
 
     private static void Describe(StringBuilder report, ProviderUsage usage)
     {

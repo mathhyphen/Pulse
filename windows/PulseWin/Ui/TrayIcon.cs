@@ -34,18 +34,20 @@ internal sealed class TrayIcon : IDisposable
     {
         _generated = BuildIcon();
 
+        var strings = Localization.Loc.Current;
+
         var menu = new System.Windows.Forms.ContextMenuStrip { ShowImageMargin = false };
-        menu.Items.Add(MenuItem("Show or hide the rail", () => ToggleRailRequested?.Invoke()));
-        menu.Items.Add(MenuItem("Refresh now", () => RefreshRequested?.Invoke()));
+        menu.Items.Add(MenuItem(strings.MenuToggleRail, () => ToggleRailRequested?.Invoke()));
+        menu.Items.Add(MenuItem(strings.MenuRefreshNow, () => RefreshRequested?.Invoke()));
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(MenuItem("Settings…", () => SettingsRequested?.Invoke()));
+        menu.Items.Add(MenuItem(strings.MenuSettings, () => SettingsRequested?.Invoke()));
         menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
-        menu.Items.Add(MenuItem("Exit", () => ExitRequested?.Invoke()));
+        menu.Items.Add(MenuItem(strings.MenuExit, () => ExitRequested?.Invoke()));
 
         _icon = new System.Windows.Forms.NotifyIcon
         {
             Icon = _generated,
-            Text = "PulseWin",
+            Text = strings.TrayTooltipName,
             Visible = true,
             ContextMenuStrip = menu,
         };
@@ -53,6 +55,23 @@ internal sealed class TrayIcon : IDisposable
         // Double-clicking the tray icon is the reflex for "show me the thing", and
         // it should not open a settings dialog to do it.
         _icon.DoubleClick += (_, _) => ToggleRailRequested?.Invoke();
+    }
+
+    /// <summary>Rebuilds the tray menu in the current language. See <c>RailWindow.RefreshLanguage</c>.</summary>
+    public void RefreshLanguage()
+    {
+        var strings = Localization.Loc.Current;
+
+        var menu = new System.Windows.Forms.ContextMenuStrip { ShowImageMargin = false };
+        menu.Items.Add(MenuItem(strings.MenuToggleRail, () => ToggleRailRequested?.Invoke()));
+        menu.Items.Add(MenuItem(strings.MenuRefreshNow, () => RefreshRequested?.Invoke()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(MenuItem(strings.MenuSettings, () => SettingsRequested?.Invoke()));
+        menu.Items.Add(new System.Windows.Forms.ToolStripSeparator());
+        menu.Items.Add(MenuItem(strings.MenuExit, () => ExitRequested?.Invoke()));
+
+        _icon.ContextMenuStrip = menu;
+        _icon.Text = strings.TrayTooltipName;
     }
 
     private static System.Windows.Forms.ToolStripMenuItem MenuItem(string text, Action action)

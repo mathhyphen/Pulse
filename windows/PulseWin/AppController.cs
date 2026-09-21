@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using PulseWin.Core;
+using PulseWin.Localization;
 using PulseWin.Services;
 using PulseWin.Storage;
 using PulseWin.Ui;
@@ -27,7 +28,7 @@ public sealed class AppController
     private SettingsWindow? _settings;
     private bool _refreshing;
 
-    public void Start()
+    public void Start(bool openSettings = false)
     {
         // Credentials are read once per launch rather than once per refresh, so a
         // locked or unreadable store cannot blank a ring in the middle of a session.
@@ -36,6 +37,10 @@ public sealed class AppController
         var settings = AppSettings.Current;
         settings.Normalise();
         settings.Save();
+
+        // Before anything is drawn: every surface below reads its strings from
+        // here, and a window built first would keep the old language for its life.
+        Loc.Initialise(settings.Language);
 
         _store.Changed += OnStoreChanged;
 
@@ -59,7 +64,7 @@ public sealed class AppController
         // Nothing switched on means there is nothing to draw, and a first run that
         // shows an empty sliver explains nothing. Open Settings instead — the same
         // choice Pulse's first-run picker makes.
-        if (settings.Enabled.Count == 0)
+        if (openSettings || settings.Enabled.Count == 0)
             Dispatcher.CurrentDispatcher.BeginInvoke(OpenSettings);
     }
 
@@ -127,6 +132,12 @@ public sealed class AppController
                 var settings = AppSettings.Current;
 
                 _clock.Interval = TimeSpan.FromMinutes(settings.RefreshMinutes);
+
+                // A language change redraws Settings itself, but the rail's menu and
+                // the tray menu were built once, with the strings of the day.
+                Loc.Setting = settings.Language;
+                _rail?.RefreshLanguage();
+                _tray?.RefreshLanguage();
 
                 if (settings.RailVisible && _rail is { IsVisible: false }) _rail.Show();
                 if (_rail is not null)
@@ -196,11 +207,15 @@ public sealed class AppController
                 ? reading.HeadlineText(AppSettings.Current.ShowsRemaining)
                 : reading.RailMoney ?? "—";
 
-            var direction = AppSettings.Current.ShowsRemaining ? "left" : "used";
+            var direction = AppSettings.Current.ShowsRemaining
+                ? Loc.Current.DirectionLeft
+                : Loc.Current.DirectionUsed;
             parts.Add($"{account.DisplayLabel}: {figure} {direction}");
         }
 
-        _tray.SetTooltip(parts.Count == 0 ? "PulseWin" : "PulseWin · " + string.Join(" · ", parts));
+        _tray.SetTooltip(parts.Count == 0
+            ? Loc.Current.TrayTooltipName
+            : $"{Loc.Current.TrayTooltipName} · " + string.Join(" · ", parts));
     }
 
     private void Exit()

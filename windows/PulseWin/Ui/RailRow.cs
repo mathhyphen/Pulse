@@ -37,7 +37,18 @@ public static class Theme
     public static readonly SolidColorBrush WarningBrush = Brush(WarningText);
     public static readonly SolidColorBrush HoverBrush = Brush(Color.FromArgb(0x30, 0xFF, 0xFF, 0xFF));
 
-    public static FontFamily Font { get; } = new("Segoe UI Variable Display, Segoe UI");
+    /// <summary>
+    /// The interface font.
+    /// </summary>
+    /// <remarks>
+    /// The CJK faces are listed explicitly rather than left to WPF's font fallback.
+    /// Fallback does work, but it is resolved per text run and only when the first
+    /// family reports the glyph missing, which is one more thing that can differ
+    /// between a TextBlock and text drawn straight into a <c>FormattedText</c> — and
+    /// this app does both. Naming them makes Chinese render the same way everywhere.
+    /// </remarks>
+    public static FontFamily Font { get; } =
+        new("Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI, Microsoft YaHei, SimSun");
 
     /// <summary>
     /// A rounded dark slab with a drop shadow, as <b>two layers</b>.

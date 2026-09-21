@@ -1,5 +1,7 @@
 namespace PulseWin.Core;
 
+using PulseWin.Localization;
+
 /// <summary>
 /// Why a provider could not answer.
 ///
@@ -47,20 +49,25 @@ public enum Unavailability
 
 public static class UnavailabilityText
 {
-    public static string Message(this Unavailability reason) => reason switch
+    public static string Message(this Unavailability reason)
     {
-        Unavailability.ApiKeyMissing => "No key has been entered for this service yet.",
-        Unavailability.ApiKeyRefused => "The service refused this key.",
-        Unavailability.RateLimited => "The service is rate limiting these checks. It will be tried again shortly.",
-        Unavailability.ServerError => "The service returned an error.",
-        Unavailability.Unreachable => "Could not reach the service.",
-        Unavailability.UnreadableReply => "The service answered in a shape this version does not recognise.",
-        Unavailability.NoLimitsReported => "The service answered, and reported no limit.",
-        Unavailability.SignInRequired => "The saved Codex login is missing or has expired. Run `codex` to sign in again.",
-        Unavailability.ZaiNoCodingPlan => "This key works, but the account has no Coding Plan running. The plan is a subscription on the account, not a property of the key.",
-        Unavailability.CodexServerFailed => "The Codex helper could not be started.",
-        _ => "Unavailable.",
-    };
+        var strings = Loc.Current;
+
+        return reason switch
+        {
+            Unavailability.ApiKeyMissing => strings.UnavailableApiKeyMissing,
+            Unavailability.ApiKeyRefused => strings.UnavailableApiKeyRefused,
+            Unavailability.RateLimited => strings.UnavailableRateLimited,
+            Unavailability.ServerError => strings.UnavailableServerError,
+            Unavailability.Unreachable => strings.UnavailableUnreachable,
+            Unavailability.UnreadableReply => strings.UnavailableUnreadableReply,
+            Unavailability.NoLimitsReported => strings.UnavailableNoLimitsReported,
+            Unavailability.SignInRequired => strings.UnavailableSignInRequired,
+            Unavailability.ZaiNoCodingPlan => strings.UnavailableZaiNoCodingPlan,
+            Unavailability.CodexServerFailed => strings.UnavailableCodexServerFailed,
+            _ => strings.UnavailableGeneric,
+        };
+    }
 }
 
 /// <summary>Money left, as a number and the currency it is denominated in.</summary>

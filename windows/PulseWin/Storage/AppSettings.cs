@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PulseWin.Core;
+using PulseWin.Localization;
 
 namespace PulseWin.Storage;
 
@@ -79,6 +80,9 @@ public sealed class AppSettings
     /// </para>
     /// </summary>
     public bool ShowsRemaining { get; set; } = true;
+
+    /// <summary>Which language the interface is drawn in. <c>Auto</c> follows Windows.</summary>
+    public UiLanguage Language { get; set; } = UiLanguage.Auto;
 
     /// <summary>
     /// Whether the rail is dimmed to a thin sliver when nothing needs attention.

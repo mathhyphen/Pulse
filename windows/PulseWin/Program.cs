@@ -35,7 +35,10 @@ public static class Program
         };
 
         var controller = new AppController();
-        controller.Start();
+
+        // `--settings` is for looking at the interface without hunting for the tray
+        // icon, which is the only other way in.
+        controller.Start(openSettings: args.Contains("--settings", StringComparer.OrdinalIgnoreCase));
 
         return app.Run();
     }

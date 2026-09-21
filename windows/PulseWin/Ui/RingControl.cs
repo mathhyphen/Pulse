@@ -248,7 +248,7 @@ public sealed class RingControl : FrameworkElement
     {
         if (resetsAt is not { } reset) return "";
         var left = reset - now;
-        if (left <= TimeSpan.Zero) return "now";
+        if (left <= TimeSpan.Zero) return Localization.Loc.Current.CountdownNow;
 
         if (left.TotalDays >= 1) return $"{(int)left.TotalDays}d {left.Hours}h";
         if (left.TotalHours >= 1) return $"{(int)left.TotalHours}h {left.Minutes:00}m";

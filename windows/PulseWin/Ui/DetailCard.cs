@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using PulseWin.Core;
+using PulseWin.Localization;
 using PulseWin.Services;
 using PulseWin.Storage;
 
@@ -76,9 +77,7 @@ internal sealed class DetailCard : Popup
             var showsRemaining = AppSettings.Current.ShowsRemaining;
             _body.Children.Add(new TextBlock
             {
-                Text = showsRemaining
-                    ? "Counting down — what is left"
-                    : "Counting up — what is used",
+                Text = showsRemaining ? Loc.Current.CardCountingDown : Loc.Current.CardCountingUp,
                 FontFamily = Theme.Font,
                 FontSize = 10.5,
                 Margin = new Thickness(0, 0, 0, 2),
@@ -93,7 +92,7 @@ internal sealed class DetailCard : Popup
             _body.Children.Add(Divider());
             _body.Children.Add(new TextBlock
             {
-                Text = "This service reports no limit — only a balance.",
+                Text = Loc.Current.CardNoLimitOnlyBalance,
                 FontFamily = Theme.Font,
                 FontSize = 11,
                 TextWrapping = TextWrapping.Wrap,
@@ -104,7 +103,7 @@ internal sealed class DetailCard : Popup
         if (reading?.CreditBalance is { } balance)
         {
             _body.Children.Add(Divider());
-            _body.Children.Add(KeyValue("Balance", balance));
+            _body.Children.Add(KeyValue(Loc.Current.CardBalance, balance));
         }
 
         if (state.LastFailure is { } failure)
@@ -126,7 +125,7 @@ internal sealed class DetailCard : Popup
             {
                 _body.Children.Add(new TextBlock
                 {
-                    Text = $"Figures above are from {Ago(reading.ObservedAt)}, not from the last check.",
+                    Text = Loc.Current.CardFiguresAreFrom(Ago(reading.ObservedAt)),
                     FontFamily = Theme.Font,
                     FontSize = 10.5,
                     TextWrapping = TextWrapping.Wrap,
@@ -140,8 +139,8 @@ internal sealed class DetailCard : Popup
         _body.Children.Add(new TextBlock
         {
             Text = reading is null
-                ? "Never read."
-                : $"Checked {Ago(reading.ObservedAt)}",
+                ? Loc.Current.CardNeverRead
+                : Loc.Current.CardChecked(Ago(reading.ObservedAt)),
             FontFamily = Theme.Font,
             FontSize = 10.5,
             Foreground = Theme.SecondaryBrush,
@@ -174,7 +173,7 @@ internal sealed class DetailCard : Popup
         {
             left.Children.Add(new TextBlock
             {
-                Text = $"resets in {reset}",
+                Text = Loc.Current.CardResetsIn(reset),
                 FontFamily = Theme.Font,
                 FontSize = 10,
                 Foreground = Theme.SecondaryBrush,
@@ -189,7 +188,7 @@ internal sealed class DetailCard : Popup
         {
             left.Children.Add(new TextBlock
             {
-                Text = $"{UsageWindow.Figure(elapsed)}% of the window elapsed",
+                Text = Loc.Current.CardWindowElapsed(UsageWindow.Figure(elapsed)),
                 FontFamily = Theme.Font,
                 FontSize = 10,
                 Foreground = Theme.SecondaryBrush,
@@ -206,8 +205,8 @@ internal sealed class DetailCard : Popup
             // figure unambiguous, and upstream puts it in exactly this place for
             // exactly this reason.
             Text = showsRemaining
-                ? $"{window.PercentText(remaining: true)} Left"
-                : $"{window.PercentText()} Used",
+                ? Loc.Current.CardSuffixLeft(window.PercentText(remaining: true))
+                : Loc.Current.CardSuffixUsed(window.PercentText()),
             FontFamily = Theme.Font,
             FontSize = 12.5,
             FontWeight = FontWeights.SemiBold,
@@ -219,7 +218,7 @@ internal sealed class DetailCard : Popup
         {
             right.Children.Add(new TextBlock
             {
-                Text = "spent",
+                Text = Loc.Current.CardSpent,
                 FontFamily = Theme.Font,
                 FontSize = 10,
                 HorizontalAlignment = HorizontalAlignment.Right,
@@ -271,11 +270,13 @@ internal sealed class DetailCard : Popup
 
     private static string Ago(DateTimeOffset when)
     {
+        var strings = Loc.Current;
         var span = DateTimeOffset.Now - when;
-        if (span < TimeSpan.Zero) return "just now";
-        if (span.TotalSeconds < 45) return "just now";
-        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes} min ago";
-        if (span.TotalHours < 24) return $"{(int)span.TotalHours} h ago";
-        return $"{(int)span.TotalDays} d ago";
+
+        if (span < TimeSpan.Zero) return strings.AgoNow;
+        if (span.TotalSeconds < 45) return strings.AgoNow;
+        if (span.TotalMinutes < 60) return strings.AgoMinutes((int)span.TotalMinutes);
+        if (span.TotalHours < 24) return strings.AgoHours((int)span.TotalHours);
+        return strings.AgoDays((int)span.TotalDays);
     }
 }

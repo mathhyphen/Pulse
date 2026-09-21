@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using PulseWin.Core;
+using PulseWin.Localization;
 using PulseWin.Services;
 using PulseWin.Storage;
 
@@ -88,6 +89,22 @@ internal sealed class RailWindow : Window
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern int SetWindowLong(IntPtr handle, int index, int value);
 
+    /// <summary>
+    /// Rebuilds the right-click menu in the current language.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="ContextMenu"/>'s items are created once, so a language change
+    /// leaves them in the old one until they are made again. Everything else on the
+    /// rail is a number and needs no translation.
+    /// </remarks>
+    public void RefreshLanguage()
+    {
+        _surface.ContextMenu = BuildMenu();
+
+        // The hover card is built fresh each time it opens, but one may be open now.
+        _card.Hide();
+    }
+
     private ContextMenu BuildMenu()    {
         var menu = new ContextMenu
         {
@@ -95,11 +112,11 @@ internal sealed class RailWindow : Window
             FontSize = 12,
         };
 
-        menu.Items.Add(Item("Refresh now", () => RefreshRequested?.Invoke()));
-        menu.Items.Add(Item("Settings…", () => SettingsRequested?.Invoke()));
+        menu.Items.Add(Item(Loc.Current.MenuRefreshNow, () => RefreshRequested?.Invoke()));
+        menu.Items.Add(Item(Loc.Current.MenuSettings, () => SettingsRequested?.Invoke()));
         menu.Items.Add(new Separator());
-        menu.Items.Add(Item("Hide the rail", () => HideRequested?.Invoke()));
-        menu.Items.Add(Item("Exit PulseWin", () => ExitRequested?.Invoke()));
+        menu.Items.Add(Item(Loc.Current.MenuHideRail, () => HideRequested?.Invoke()));
+        menu.Items.Add(Item(Loc.Current.MenuExit, () => ExitRequested?.Invoke()));
         return menu;
     }
 

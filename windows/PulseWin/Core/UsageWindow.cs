@@ -1,5 +1,7 @@
 namespace PulseWin.Core;
 
+using PulseWin.Localization;
+
 /// <summary>
 /// What kind of window this is, kept as meaning rather than as text.
 ///
@@ -247,28 +249,31 @@ public sealed class UsageWindow
     {
         get
         {
+            var strings = Loc.Current;
+
             var baseName = Kind switch
             {
-                WindowKind.FiveHour => "5-hour limit",
-                WindowKind.Weekly => "Weekly limit",
-                WindowKind.Spend => "Spend limit",
-                WindowKind.Balance => "Balance",
-                WindowKind.Daily => "Daily limit",
-                WindowKind.Messages => "Message allowance",
-                WindowKind.Monthly => "Monthly limit",
+                WindowKind.FiveHour => strings.WindowFiveHour,
+                WindowKind.Weekly => strings.WindowWeekly,
+                WindowKind.Spend => strings.WindowSpend,
+                WindowKind.Balance => strings.WindowBalance,
+                WindowKind.Daily => strings.WindowDaily,
+                WindowKind.Messages => strings.WindowMessages,
+                WindowKind.Monthly => strings.WindowMonthly,
                 WindowKind.Other => OtherSeconds >= 86400
-                    ? $"{Math.Round(OtherSeconds / 86400.0)}-day limit"
-                    : $"{Math.Round(OtherSeconds / 3600.0)}-hour limit",
-                _ => "Limit",
+                    ? strings.WindowDays((int)Math.Round(OtherSeconds / 86400.0))
+                    : strings.WindowHours((int)Math.Round(OtherSeconds / 3600.0)),
+                _ => strings.WindowLimit,
             };
 
+            // The scope is a model or product name and is never translated.
             var scoped = Scope is null ? baseName : $"{baseName} · {Scope}";
 
             var estimate = Estimate switch
             {
-                WindowEstimate.PlanPrice => " · estimated",
-                WindowEstimate.SinceTopUp => " · since top-up",
-                WindowEstimate.YourBudget => " · of your budget",
+                WindowEstimate.PlanPrice => $" · {strings.EstimatePlanPrice}",
+                WindowEstimate.SinceTopUp => $" · {strings.EstimateSinceTopUp}",
+                WindowEstimate.YourBudget => $" · {strings.EstimateYourBudget}",
                 _ => "",
             };
 
